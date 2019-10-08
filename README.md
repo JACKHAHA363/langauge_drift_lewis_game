@@ -1,5 +1,5 @@
 # A set of toy environment
-1. Lewis Signalling Game
+1. Passcode Guessing Game
 2. OR (Object Reconstruction) Game
 3. Image Referential Game
 
