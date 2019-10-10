@@ -12,14 +12,6 @@ class LewisGame:
               ('t', int, 10, 'nb types')]
 
     @classmethod
-    def get_cmd_parser(cls, parser=None):
-        if parser is None:
-            parser = argparse.ArgumentParser()
-        for name, dtype, default, desc in cls.fields:
-            parser.add('--' + name, type=dtype, default=default, help=desc)
-        return parser
-
-    @classmethod
     def get_default_config(cls):
         return {name: default for name, _, default, _ in cls.fields}
 
@@ -27,9 +19,11 @@ class LewisGame:
         self.p = p
         self.t = t
         self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])
+        self.all_msgs = self.objs_to_msg(self.all_objs)
 
     def get_random_objs(self, batch_size):
-        return torch.randint(low=0, high=self.t, size=[batch_size, self.p]).long()
+        indices = torch.randint(len(self.all_objs), size=[batch_size]).long()
+        return self.all_objs[indices]
 
     @property
     def vocab_size(self):
