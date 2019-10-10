@@ -45,46 +45,35 @@ class LewisGame:
 
 
 class Agent(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, env_config):
         super(Agent, self).__init__()
+        self.env_config = env_config
 
-    @abstractmethod
     def save(self, pth_path):
-        raise NotImplementedError
+        info = {'env_config': self.env_config,
+                'state_dict': self.state_dict()}
+        torch.save(info, pth_path)
 
     @classmethod
-    @abstractmethod
     def load(cls, pth_path):
-        raise NotImplementedError
+        info = torch.load(pth_path)
+        speaker = cls(env_config=['env_config'])
+        speaker.load_state_dict(info['state_dict'])
+        return speaker
 
 
 class BaseSpeaker(Agent):
     """ Speaker model """
-    @abstractmethod
-    def output_msg(self, objs):
-        """ Method for testing
-        :param objs: [bsz, nb_props*nb_types]
-        :return: msgs: [bsz, nb_props]
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_msg_logprobs(self, objs, msg):
-        """ logprobs [bsz, nb_props] """
-        raise NotImplementedError
+    def get_logits(self, objs):
+        """ Return [bsz, nb_props, vocab_size] """
+        return self.forward(objs)
 
 
 class BaseListener(Agent):
     """ Listener """
-    @abstractmethod
-    def build_obj(self, msgs):
+    def get_logits(self, msgs):
         """ Method for testing
         :param msgs: [bsz, nb_props]
-        :return: objs: [bsz, nb_props]
+        :return: objs: [bsz, nb_props, nb_types]
         """
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_obj_logprobs(self, msgs, objs):
-        """ logprobs [bsz, nb_props] """
-        raise NotImplementedError
+        return self.forward(msgs)
