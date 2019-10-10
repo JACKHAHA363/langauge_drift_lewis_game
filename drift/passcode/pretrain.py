@@ -15,7 +15,7 @@ optim = torch.optim.Adam(lr=0.001, params=model.parameters())
 
 
 for step in range(STEPS):
-    codes = torch.randint(low=0, high=NB_CODE - 1, size=[BATCH_SIZE]).long()
+    codes = torch.randint(low=0, high=NB_CODE, size=[BATCH_SIZE]).long()
     dist = model.get_action_dist(codes)
     log_probs = dist.log_prob(codes)
     log_probs = log_probs.mean()

@@ -60,7 +60,7 @@ class Env:
     def generate_trajs(self, sender, receiver, batch_size):
         """ Given two model generate a batch of trajs
         """
-        codes = torch.randint(low=0, high=self.nb_code - 1, size=[batch_size])
+        codes = torch.randint(low=0, high=self.nb_code, size=[batch_size])
         s_dist = sender.get_action_dist(codes)
         msg = s_dist.sample()
 

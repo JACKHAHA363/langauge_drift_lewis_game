@@ -20,7 +20,7 @@ ropt = torch.optim.Adam(lr=RLR, params=receiver.parameters())
 NB_CODE = sender.emb.num_embeddings
 
 for step in range(STEPS):
-    codes = torch.randint(low=0, high=NB_CODE - 1, size=[BATCH_SIZE]).long()
+    codes = torch.randint(low=0, high=NB_CODE, size=[BATCH_SIZE]).long()
     s_dist = sender.get_action_dist(codes)
     msg = s_dist.sample()
     r_dist = receiver.get_action_dist(msg)
