@@ -1,5 +1,6 @@
 import torch
 from torch.distributions import Categorical
+import numpy as np
 from drift.lewis.core import LewisGame
 from drift.lewis.linear import Listener, Speaker
 
@@ -57,6 +58,10 @@ def eval_loop(val_generator, listener, speaker):
     l_total = 0
     s_corrects = 0
     s_total = 0
+
+    # Add speaker confusion matrix
+    vocab_size = listener.env_config['p'] * listener.env_config['t']
+    s_conf_mat = torch.zeros([vocab_size, vocab_size])
     for objs, msgs in val_generator:
         with torch.no_grad():
             l_logits = listener(listener.one_hot(msgs))
@@ -69,7 +74,10 @@ def eval_loop(val_generator, listener, speaker):
             s_corrects += (s_pred == msgs).float().sum().item()
             s_total += msgs.numel()
 
-    return {'l_acc': l_corrects / l_total, 's_acc': s_corrects / s_total}
+            for m, pred in zip(msgs.view(-1), s_pred.view(-1)):
+                s_conf_mat[m, pred] += 1
+    s_conf_mat /= torch.sum(s_conf_mat, -1, keepdim=True)
+    return {'l_acc': l_corrects / l_total, 's_acc': s_corrects / s_total}, s_conf_mat
 
 
 def main():
@@ -84,8 +92,8 @@ def main():
     # writer = SummaryWriter('log_pretrain')
     for epoch in range(NB_EPOCHS):
         if epoch % LOG_STEPS == 0:
-            stats = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
-                              speaker=speaker)
+            stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
+                                 speaker=speaker)
             logstr = ["epoch {}:".format(epoch)]
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))

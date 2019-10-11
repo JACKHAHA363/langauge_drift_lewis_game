@@ -11,7 +11,7 @@ SPEAKER_CKPT = "./s_sl.pth"
 LISTENER_CKPT = './l_sl.pth'
 TRAIN_STEPS = 10000
 BATCH_SIZE = 50
-LOG_STEPS = 10
+LOG_STEPS = 50
 USE_GUMBEL = True  # If true use STE Gumbel
 GUMBEL_TEMP = 0.1   # Temperature for gumbel softmax
 LOG_NAME = 'log_selfplay'
@@ -45,8 +45,9 @@ def main():
 
     for step in range(TRAIN_STEPS):
         if step % LOG_STEPS == 0:
-            stats = eval_loop(dset.val_generator(1000), listener=listener,
-                              speaker=speaker)
+            stats, s_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
+                                          speaker=speaker)
+            writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
             logstr = ["epoch {}:".format(step)]
             for name, val in stats.items():
