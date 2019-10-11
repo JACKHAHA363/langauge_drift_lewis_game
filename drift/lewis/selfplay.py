@@ -10,10 +10,10 @@ from torch.distributions import Categorical
 SPEAKER_CKPT = "./s_sl.pth"
 LISTENER_CKPT = './l_sl.pth'
 TRAIN_STEPS = 10000
-BATCH_SIZE = 50
+BATCH_SIZE = 500
 LOG_STEPS = 50
 USE_GUMBEL = False  # If true use STE Gumbel
-GUMBEL_TEMP = 0.1   # Temperature for gumbel softmax
+GUMBEL_TEMP = 0.1  # Temperature for gumbel softmax
 LOG_NAME = 'log_selfplay'
 
 
@@ -31,6 +31,18 @@ def get_comm_acc(val_generator, listener, speaker):
     return {'comm_acc': corrects / total}
 
 
+class ExponentialMovingAverager:
+    def __init__(self, init_mean, gamma=0.7):
+        self.mean = init_mean
+        self.num = 1
+        self.gamma = gamma
+
+    def update(self, value):
+        coef = self.gamma / (1 + self.num)
+        self.mean = self.mean * coef + (1 - coef) * value
+        self.num += 1
+
+
 def main():
     speaker = Speaker.load(SPEAKER_CKPT)
     listener = Listener.load(LISTENER_CKPT)
@@ -43,6 +55,7 @@ def main():
         rmtree(LOG_NAME)
     writer = SummaryWriter(LOG_NAME)
 
+    ema_reward = None
     for step in range(TRAIN_STEPS):
         if step % LOG_STEPS == 0:
             stats, s_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
@@ -89,8 +102,16 @@ def main():
         # Policy gradient
         else:
             rewards = l_logprobs.detach()
+            rewards_mean = rewards.mean().item()
+
+            # Compute reward average
+            if ema_reward is not None:
+                ema_reward.update(rewards_mean)
+            else:
+                ema_reward = ExponentialMovingAverager(rewards_mean)
+
             s_logprobs = Categorical(s_logits).log_prob(msgs).sum(-1)
-            reinforce = rewards * s_logprobs
+            reinforce = (rewards - ema_reward.mean) * s_logprobs
             s_opt.zero_grad()
             (-reinforce.mean()).backward()
             s_opt.step()
