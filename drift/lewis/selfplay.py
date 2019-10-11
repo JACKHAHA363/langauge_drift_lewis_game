@@ -12,7 +12,7 @@ LISTENER_CKPT = './l_sl.pth'
 TRAIN_STEPS = 10000
 BATCH_SIZE = 50
 LOG_STEPS = 50
-USE_GUMBEL = True  # If true use STE Gumbel
+USE_GUMBEL = False  # If true use STE Gumbel
 GUMBEL_TEMP = 0.1   # Temperature for gumbel softmax
 LOG_NAME = 'log_selfplay'
 
@@ -70,7 +70,7 @@ def main():
             oh_msgs.grad = None
         else:
             msgs = Categorical(logits=s_logits).sample()
-            oh_msgs = listener.one_hot(oh_msgs)
+            oh_msgs = listener.one_hot(msgs)
         l_logits = listener(oh_msgs)
 
         # Train listener
