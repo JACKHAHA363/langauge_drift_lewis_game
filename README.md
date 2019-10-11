@@ -4,3 +4,9 @@
 3. Image Referential Game
 
 [Reference](https://openreview.net/pdf?id=rJxGLlBtwH)
+
+# Install
+`git clone` and `pip intall -e .`
+
+# Usage
+Two main scripts are `pretrain.py` and `selfplay.py`
