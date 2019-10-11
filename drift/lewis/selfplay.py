@@ -10,9 +10,10 @@ from torch.distributions import Categorical
 SPEAKER_CKPT = "./s_sl.pth"
 LISTENER_CKPT = './l_sl.pth'
 TRAIN_STEPS = 10000
-BATCH_SIZE = 1000
+BATCH_SIZE = 50
 LOG_STEPS = 10
 USE_GUMBEL = True  # If true use STE Gumbel
+GUMBEL_TEMP = 0.1   # Temperature for gumbel softmax
 LOG_NAME = 'log_selfplay'
 
 
@@ -58,7 +59,7 @@ def main():
         s_logits = speaker(objs)
 
         if USE_GUMBEL:
-            y = torch.nn.functional.softmax(s_logits, dim=-1)
+            y = torch.nn.functional.softmax(s_logits / GUMBEL_TEMP, dim=-1)
             g = torch.distributions.Gumbel(loc=0, scale=1).sample(y.shape)
             msgs = torch.argmax(torch.log(y) + g, dim=-1)
 

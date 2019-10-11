@@ -3,10 +3,10 @@ from torch.distributions import Categorical
 from drift.lewis.core import LewisGame
 from drift.lewis.linear import Listener, Speaker
 
-TRAIN_SIZE = 20
+TRAIN_SIZE = 10
 TRAIN_BATCH_SIZE = 5
 VAL_BATCH_SIZE = 1000
-NB_EPOCHS = 100
+NB_EPOCHS = 50
 LOG_STEPS = 1
 
 
