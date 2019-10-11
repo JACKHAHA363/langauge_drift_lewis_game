@@ -3,8 +3,8 @@ from torch.distributions import Categorical
 from drift.lewis.core import LewisGame
 from drift.lewis.linear import Listener, Speaker
 
-TRAIN_SIZE = 500
-TRAIN_BATCH_SIZE = 20
+TRAIN_SIZE = 100
+TRAIN_BATCH_SIZE = 5
 VAL_BATCH_SIZE = 1000
 NB_EPOCHS = 100
 LOG_STEPS = 1
@@ -25,7 +25,7 @@ class Dataset:
         # Randomly sample from all objects
         indices = torch.randint(len(self.game.all_objs), [5000]).long()
         objs = self.game.all_objs[indices]
-        msgs = self.game.all_objs[indices]
+        msgs = self.game.all_msgs[indices]
         return self._get_generator(objs, msgs, batch_size)
 
     @staticmethod
