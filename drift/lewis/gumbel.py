@@ -10,11 +10,10 @@ from torch.distributions import Categorical
 SPEAKER_CKPT = "./s_sl.pth"
 LISTENER_CKPT = './l_sl.pth'
 TRAIN_STEPS = 10000
-BATCH_SIZE = 50
+BATCH_SIZE = 500
 LOG_STEPS = 50
-USE_GUMBEL = False  # If true use STE Gumbel
-GUMBEL_TEMP = 0.1   # Temperature for gumbel softmax
-LOG_NAME = 'log_selfplay'
+GUMBEL_TEMP = 0.1  # Temperature for gumbel softmax
+LOG_NAME = 'log_gumbel'
 
 
 def get_comm_acc(val_generator, listener, speaker):
@@ -59,18 +58,14 @@ def main():
         objs = game.get_random_objs(BATCH_SIZE)
         s_logits = speaker(objs)
 
-        if USE_GUMBEL:
-            y = torch.nn.functional.softmax(s_logits / GUMBEL_TEMP, dim=-1)
-            g = torch.distributions.Gumbel(loc=0, scale=1).sample(y.shape)
-            msgs = torch.argmax(torch.log(y) + g, dim=-1)
+        y = torch.nn.functional.softmax(s_logits / GUMBEL_TEMP, dim=-1)
+        g = torch.distributions.Gumbel(loc=0, scale=1).sample(y.shape)
+        msgs = torch.argmax(torch.log(y) + g, dim=-1)
 
-            # Get gradient to keep backprop to speaker
-            oh_msgs = listener.one_hot(msgs)
-            oh_msgs.requires_grad = True
-            oh_msgs.grad = None
-        else:
-            msgs = Categorical(logits=s_logits).sample()
-            oh_msgs = listener.one_hot(msgs)
+        # Get gradient to keep backprop to speaker
+        oh_msgs = listener.one_hot(msgs)
+        oh_msgs.requires_grad = True
+        oh_msgs.grad = None
         l_logits = listener(oh_msgs)
 
         # Train listener
@@ -81,19 +76,9 @@ def main():
         l_opt.step()
 
         # Train Speaker
-        if USE_GUMBEL:
-            s_opt.zero_grad()
-            y.backward(oh_msgs.grad)
-            s_opt.step()
-
-        # Policy gradient
-        else:
-            rewards = l_logprobs.detach()
-            s_logprobs = Categorical(s_logits).log_prob(msgs).sum(-1)
-            reinforce = rewards * s_logprobs
-            s_opt.zero_grad()
-            (-reinforce.mean()).backward()
-            s_opt.step()
+        s_opt.zero_grad()
+        y.backward(oh_msgs.grad)
+        s_opt.step()
 
 
 if __name__ == '__main__':
