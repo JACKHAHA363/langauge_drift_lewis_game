@@ -13,7 +13,7 @@ class Speaker(BaseSpeaker):
 
     def forward(self, objs):
         """ return [bsz, nb_prop, vocab_size] """
-        oh_objs = self._one_hot(objs).float()
+        oh_objs = self._one_hot(objs)
         logits = self.linear2(self.linear1(oh_objs))
         return logits.view(objs.shape[0], self.env_config['p'], -1)
 
@@ -22,7 +22,7 @@ class Speaker(BaseSpeaker):
         :param objs [bsz, nb_props]
         :param oh_objs [bsz, nb_props * nb_types]
         """
-        oh_objs = torch.LongTensor(size=[objs.shape[0], objs.shape[1], self.env_config['t']])
+        oh_objs = torch.Tensor(size=[objs.shape[0], objs.shape[1], self.env_config['t']])
         oh_objs.zero_()
         oh_objs.scatter_(2, objs.unsqueeze(-1), 1)
         return oh_objs.view([objs.shape[0], -1])
@@ -31,12 +31,19 @@ class Speaker(BaseSpeaker):
 class Listener(BaseListener):
     def __init__(self, env_config):
         super(Listener, self).__init__(env_config)
-        self.emb = torch.nn.Embedding(self.env_config['p'] * self.env_config['t'], 200)
-        self.linear = torch.nn.Linear(200, self.env_config['t'])
+        self.linear1 = torch.nn.Linear(self.env_config['p'] * self.env_config['t'], 200)
+        self.linear2 = torch.nn.Linear(200, self.env_config['t'])
 
-    def forward(self, msgs):
+    def forward(self, oh_msgs):
         """ return [bsz, nb_prop, type_size] """
-        # [bsz, p, 200]
-        embs = self.emb(msgs)
-        logits = self.linear(embs)
-        return logits
+        return self.linear2(self.linear1(oh_msgs))
+
+    def one_hot(self, msgs):
+        """
+        :param msgs: [bsz, nb_props]
+        :return: [bsz, nb_props, vocab_size]
+        """
+        oh_msgs = torch.Tensor(size=[msgs.shape[0], msgs.shape[1], self.env_config['p'] * self.env_config['t']])
+        oh_msgs.zero_()
+        oh_msgs.scatter_(2, msgs.unsqueeze(-1), 1)
+        return oh_msgs

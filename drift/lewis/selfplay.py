@@ -12,7 +12,7 @@ LISTENER_CKPT = './l_sl.pth'
 TRAIN_STEPS = 10000
 BATCH_SIZE = 1000
 LOG_STEPS = 10
-USE_GUMBEL = False  # If true use STE Gumbel
+USE_GUMBEL = True  # If true use STE Gumbel
 LOG_NAME = 'log_selfplay'
 
 
@@ -23,7 +23,7 @@ def get_comm_acc(val_generator, listener, speaker):
         with torch.no_grad():
             s_logits = speaker(objs)
             msgs = torch.argmax(s_logits, dim=-1)
-            l_logits = listener(msgs)
+            l_logits = listener(listener.one_hot(msgs))
             preds = torch.argmax(l_logits, dim=-1)
             corrects += (preds == objs).float().sum().item()
             total += objs.numel()
@@ -58,32 +58,40 @@ def main():
         s_logits = speaker(objs)
 
         if USE_GUMBEL:
-            raise NotImplementedError
+            y = torch.nn.functional.softmax(s_logits, dim=-1)
+            g = torch.distributions.Gumbel(loc=0, scale=1).sample(y.shape)
+            msgs = torch.argmax(torch.log(y) + g, dim=-1)
+
+            # Get gradient to keep backprop to speaker
+            oh_msgs = listener.one_hot(msgs)
+            oh_msgs.requires_grad = True
+            oh_msgs.grad = None
         else:
             msgs = Categorical(logits=s_logits).sample()
-        l_logits = listener(msgs)
+            oh_msgs = listener.one_hot(oh_msgs)
+        l_logits = listener(oh_msgs)
 
         # Train listener
         l_logprobs = Categorical(logits=l_logits).log_prob(objs)
         l_logprobs = l_logprobs.sum(-1)
         l_opt.zero_grad()
-        (-l_logprobs.mean()).backward()
+        (-l_logprobs.mean()).backward(retain_graph=True)
         l_opt.step()
 
         # Train Speaker
         if USE_GUMBEL:
-            raise NotImplementedError
+            s_opt.zero_grad()
+            y.backward(oh_msgs.grad)
+            s_opt.step()
 
         # Policy gradient
         else:
             rewards = l_logprobs.detach()
             s_logprobs = Categorical(s_logits).log_prob(msgs).sum(-1)
             reinforce = rewards * s_logprobs
-            s_loss = (-reinforce).mean()
-
-        s_opt.zero_grad()
-        s_loss.backward()
-        s_opt.step()
+            s_opt.zero_grad()
+            (-reinforce.mean()).backward()
+            s_opt.step()
 
 
 if __name__ == '__main__':

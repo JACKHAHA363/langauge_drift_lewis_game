@@ -3,7 +3,7 @@ from torch.distributions import Categorical
 from drift.lewis.core import LewisGame
 from drift.lewis.linear import Listener, Speaker
 
-TRAIN_SIZE = 100
+TRAIN_SIZE = 20
 TRAIN_BATCH_SIZE = 5
 VAL_BATCH_SIZE = 1000
 NB_EPOCHS = 100
@@ -45,7 +45,7 @@ def train_loop(l_opt, listener, s_opt, speaker, train_generator):
         (-s_logprobs.mean()).backward()
         s_opt.step()
 
-        l_logits = listener(train_msgs)
+        l_logits = listener(listener.one_hot(train_msgs))
         l_logprobs = Categorical(logits=l_logits).log_prob(train_objs)
         l_opt.zero_grad()
         (-l_logprobs.mean()).backward()
@@ -59,7 +59,7 @@ def eval_loop(val_generator, listener, speaker):
     s_total = 0
     for objs, msgs in val_generator:
         with torch.no_grad():
-            l_logits = listener(msgs)
+            l_logits = listener(listener.one_hot(msgs))
             l_pred = torch.argmax(l_logits, dim=-1)
             l_corrects += (l_pred == objs).float().sum().item()
             l_total += objs.numel()
