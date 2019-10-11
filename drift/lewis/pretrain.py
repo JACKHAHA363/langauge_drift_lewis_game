@@ -19,10 +19,10 @@ class Dataset:
         self.game = game
 
     def train_generator(self, batch_size):
-        """ A never ending generator """
         return self._get_generator(self.train_objs, self.train_msgs, batch_size)
 
     def val_generator(self, batch_size):
+        # Randomly sample from all objects
         indices = torch.randint(len(self.game.all_objs), [5000]).long()
         objs = self.game.all_objs[indices]
         msgs = self.game.all_objs[indices]
