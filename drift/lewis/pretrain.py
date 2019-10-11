@@ -1,12 +1,10 @@
 import torch
 from torch.distributions import Categorical
-from tqdm import tqdm
-from tensorboardX import SummaryWriter
 from drift.lewis.core import LewisGame
 from drift.lewis.linear import Listener, Speaker
 
-TRAIN_SIZE = 10
-TRAIN_BATCH_SIZE = 5
+TRAIN_SIZE = 500
+TRAIN_BATCH_SIZE = 20
 VAL_BATCH_SIZE = 1000
 NB_EPOCHS = 100
 LOG_STEPS = 1
@@ -25,7 +23,10 @@ class Dataset:
         return self._get_generator(self.train_objs, self.train_msgs, batch_size)
 
     def val_generator(self, batch_size):
-        return self._get_generator(self.game.all_objs[:5000], self.game.all_msgs[:5000], batch_size)
+        indices = torch.randint(len(self.game.all_objs), [5000]).long()
+        objs = self.game.all_objs[indices]
+        msgs = self.game.all_objs[indices]
+        return self._get_generator(objs, msgs, batch_size)
 
     @staticmethod
     def _get_generator(objs, msgs, batch_size):
