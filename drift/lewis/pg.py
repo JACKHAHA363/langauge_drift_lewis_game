@@ -30,7 +30,7 @@ def get_comm_acc(val_generator, listener, speaker):
 
 
 class ExponentialMovingAverager:
-    def __init__(self, init_mean, gamma=0.7):
+    def __init__(self, init_mean, gamma=0.1):
         self.mean = init_mean
         self.num = 1
         self.gamma = gamma
@@ -90,10 +90,12 @@ def main():
         else:
             ema_reward = ExponentialMovingAverager(rewards_mean)
 
-        s_logprobs = Categorical(s_logits).log_prob(msgs).sum(-1)
+        s_dist = Categorical(s_logits)
+        s_logprobs = s_dist.log_prob(msgs).sum(-1)
         reinforce = (rewards - ema_reward.mean) * s_logprobs
+        entropy = s_dist.entropy().sum(-1)
         s_opt.zero_grad()
-        (-reinforce.mean()).backward()
+        (-reinforce.mean() - 0.0001 * entropy.mean()).backward()
         s_opt.step()
 
 
