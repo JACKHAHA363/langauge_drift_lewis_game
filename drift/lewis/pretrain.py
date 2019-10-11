@@ -32,7 +32,7 @@ class Dataset:
     def _get_generator(objs, msgs, batch_size):
         start = 0
         while start < len(objs):
-            yield objs[start: start+batch_size], msgs[start: start+batch_size]
+            yield objs[start: start + batch_size], msgs[start: start + batch_size]
             start += batch_size
 
 
@@ -81,7 +81,7 @@ def main():
     s_opt = torch.optim.Adam(lr=5e-4, params=speaker.parameters())
     listener = Listener(env_config)
     l_opt = torch.optim.Adam(lr=5e-4, params=listener.parameters())
-    #writer = SummaryWriter('log_pretrain')
+    # writer = SummaryWriter('log_pretrain')
     for epoch in range(NB_EPOCHS):
         if epoch % LOG_STEPS == 0:
             stats = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
@@ -89,7 +89,7 @@ def main():
             logstr = ["epoch {}:".format(epoch)]
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))
-                #writer.add_scalar(name, val, epoch)
+                # writer.add_scalar(name, val, epoch)
             print(' '.join(logstr))
 
         train_loop(l_opt, listener, s_opt, speaker, dset.train_generator(TRAIN_BATCH_SIZE))

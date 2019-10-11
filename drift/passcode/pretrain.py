@@ -13,7 +13,6 @@ writer = SummaryWriter('log_pretrain')
 model = Model(nb_code=NB_CODE, model_size=MODEL_SIZE)
 optim = torch.optim.Adam(lr=0.001, params=model.parameters())
 
-
 for step in range(STEPS):
     codes = torch.randint(low=0, high=NB_CODE, size=[BATCH_SIZE]).long()
     dist = model.get_action_dist(codes)

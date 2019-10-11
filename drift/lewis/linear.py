@@ -40,6 +40,3 @@ class Listener(BaseListener):
         embs = self.emb(msgs)
         logits = self.linear(embs)
         return logits
-
-
-

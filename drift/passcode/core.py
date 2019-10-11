@@ -4,6 +4,7 @@ import attr
 
 class Model(torch.nn.Module):
     """ Just a 2-layer MLP """
+
     def __init__(self, nb_code, model_size):
         super(Model, self).__init__()
         self.emb = torch.nn.Embedding(nb_code, model_size)
@@ -54,6 +55,7 @@ class Batch:
 
 class Env:
     """ code_size == msg_size """
+
     def __init__(self, nb_code):
         self.nb_code = nb_code
 
@@ -71,7 +73,7 @@ class Env:
 
 def eval_drift(model, nb_codes):
     """ Check how many symbols mismatched """
-    codes = torch.range(0, nb_codes-1).long()
+    codes = torch.range(0, nb_codes - 1).long()
     with torch.no_grad():
         logits = model(codes)
     decs = torch.argmax(logits, -1)

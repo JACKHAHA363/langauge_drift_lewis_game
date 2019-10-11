@@ -58,6 +58,7 @@ class Agent(torch.nn.Module):
 
 class BaseSpeaker(Agent):
     """ Speaker model """
+
     def get_logits(self, objs):
         """ Return [bsz, nb_props, vocab_size] """
         return self.forward(objs)
@@ -65,6 +66,7 @@ class BaseSpeaker(Agent):
 
 class BaseListener(Agent):
     """ Listener """
+
     def get_logits(self, msgs):
         """ Method for testing
         :param msgs: [bsz, nb_props]
