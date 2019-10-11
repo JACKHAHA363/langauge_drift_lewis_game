@@ -51,7 +51,7 @@ class Agent(torch.nn.Module):
     @classmethod
     def load(cls, pth_path):
         info = torch.load(pth_path)
-        speaker = cls(env_config=['env_config'])
+        speaker = cls(env_config=info['env_config'])
         speaker.load_state_dict(info['state_dict'])
         return speaker
 
