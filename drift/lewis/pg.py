@@ -1,5 +1,5 @@
-from drift.lewis.core import LewisGame
-from drift.lewis.pretrain import Dataset, eval_loop
+from drift.lewis.core import LewisGame, get_comm_acc, eval_loop
+from drift.lewis.pretrain import Dataset
 from drift.lewis.linear import Speaker, Listener
 import torch
 import os
@@ -13,20 +13,6 @@ TRAIN_STEPS = 10000
 BATCH_SIZE = 500
 LOG_STEPS = 50
 LOG_NAME = 'log_pg'
-
-
-def get_comm_acc(val_generator, listener, speaker):
-    corrects = 0
-    total = 0
-    for objs, _ in val_generator:
-        with torch.no_grad():
-            s_logits = speaker(objs)
-            msgs = torch.argmax(s_logits, dim=-1)
-            l_logits = listener(listener.one_hot(msgs))
-            preds = torch.argmax(l_logits, dim=-1)
-            corrects += (preds == objs).float().sum().item()
-            total += objs.numel()
-    return {'comm_acc': corrects / total}
 
 
 class ExponentialMovingAverager:

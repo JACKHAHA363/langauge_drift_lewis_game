@@ -1,7 +1,6 @@
 import torch
 from torch.distributions import Categorical
-import numpy as np
-from drift.lewis.core import LewisGame
+from drift.lewis.core import LewisGame, eval_loop
 from drift.lewis.linear import Listener, Speaker
 
 TRAIN_SIZE = 10
@@ -51,33 +50,6 @@ def train_loop(l_opt, listener, s_opt, speaker, train_generator):
         l_opt.zero_grad()
         (-l_logprobs.mean()).backward()
         l_opt.step()
-
-
-def eval_loop(val_generator, listener, speaker):
-    l_corrects = 0
-    l_total = 0
-    s_corrects = 0
-    s_total = 0
-
-    # Add speaker confusion matrix
-    vocab_size = listener.env_config['p'] * listener.env_config['t']
-    s_conf_mat = torch.zeros([vocab_size, vocab_size])
-    for objs, msgs in val_generator:
-        with torch.no_grad():
-            l_logits = listener(listener.one_hot(msgs))
-            l_pred = torch.argmax(l_logits, dim=-1)
-            l_corrects += (l_pred == objs).float().sum().item()
-            l_total += objs.numel()
-
-            s_logits = speaker(objs)
-            s_pred = torch.argmax(s_logits, dim=-1)
-            s_corrects += (s_pred == msgs).float().sum().item()
-            s_total += msgs.numel()
-
-            for m, pred in zip(msgs.view(-1), s_pred.view(-1)):
-                s_conf_mat[m, pred] += 1
-    s_conf_mat /= torch.sum(s_conf_mat, -1, keepdim=True)
-    return {'l_acc': l_corrects / l_total, 's_acc': s_corrects / s_total}, s_conf_mat
 
 
 def main():
