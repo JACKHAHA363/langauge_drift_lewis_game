@@ -8,7 +8,7 @@ from tensorboardX import SummaryWriter
 from torch.distributions import Categorical
 
 TRAIN_STEPS = 2500
-BATCH_SIZE = 100
+BATCH_SIZE = 500
 LOG_STEPS = 10
 LOG_NAME = 'log_gumbel'
 
