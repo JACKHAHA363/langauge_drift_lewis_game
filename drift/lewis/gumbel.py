@@ -7,7 +7,7 @@ from shutil import rmtree
 from tensorboardX import SummaryWriter
 from torch.distributions import Categorical
 
-TRAIN_STEPS = 5000
+TRAIN_STEPS = 2500
 BATCH_SIZE = 100
 LOG_STEPS = 10
 LOG_NAME = 'log_gumbel'
