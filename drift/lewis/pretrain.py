@@ -3,9 +3,6 @@ from torch.distributions import Categorical
 from drift.lewis.core import LewisGame, eval_loop
 from drift.lewis.linear import Listener, Speaker
 
-TRAIN_SIZE = 100
-TRAIN_BATCH_SIZE = 50
-TRAIN_STEPS = 100
 VAL_BATCH_SIZE = 1000
 LOG_STEPS = 100
 
@@ -51,10 +48,10 @@ def train_batch(l_opt, listener, s_opt, speaker, objs, msgs):
     l_opt.step()
 
 
-def main():
+def train(train_batch_size, train_steps, train_size):
     env_config = LewisGame.get_default_config()
     game = LewisGame(**env_config)
-    dset = Dataset(game, TRAIN_SIZE)
+    dset = Dataset(game, train_size)
 
     speaker = Speaker(env_config)
     s_opt = torch.optim.Adam(lr=5e-4, params=speaker.parameters())
@@ -62,8 +59,8 @@ def main():
     l_opt = torch.optim.Adam(lr=5e-4, params=listener.parameters())
     # writer = SummaryWriter('log_pretrain')
     step = 0
-    while step < TRAIN_STEPS:
-        for objs, msgs in dset.train_generator(TRAIN_BATCH_SIZE):
+    while step < train_steps:
+        for objs, msgs in dset.train_generator(train_batch_size):
             train_batch(l_opt, listener, s_opt, speaker, objs, msgs)
             if step % LOG_STEPS == 0:
                 stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
@@ -83,10 +80,10 @@ def main():
         # writer.add_scalar(name, val, epoch)
     print(' '.join(logstr))
 
-    model_name_template = "size_{}_steps_{}_batch_{}.pth"
-    speaker.save('s_' + model_name_template.format(TRAIN_SIZE, TRAIN_STEPS, TRAIN_BATCH_SIZE))
-    listener.save('l_' + model_name_template.format(TRAIN_SIZE, TRAIN_STEPS, TRAIN_BATCH_SIZE))
+    return speaker, listener
 
 
 if __name__ == '__main__':
-    main()
+    speaker, listener = train(50, 100, 100)
+    speaker.save('s_sl.pth')
+    listener.save('l_sl.pth')

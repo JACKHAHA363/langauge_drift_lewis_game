@@ -7,11 +7,9 @@ from shutil import rmtree
 from tensorboardX import SummaryWriter
 from torch.distributions import Categorical
 
-SPEAKER_CKPT = "./s_sl.pth"
-LISTENER_CKPT = './l_sl.pth'
 TRAIN_STEPS = 10000
 BATCH_SIZE = 100
-LOG_STEPS = 50
+LOG_STEPS = 10
 GUMBEL_TEMP = 0.1  # Temperature for gumbel softmax
 LOG_NAME = 'log_gumbel'
 
@@ -68,6 +66,6 @@ def selfplay(speaker, listener):
 
 
 if __name__ == '__main__':
-    speaker = Speaker.load(SPEAKER_CKPT)
-    listener = Listener.load(LISTENER_CKPT)
+    speaker = Speaker.load('s_sl.pth')
+    listener = Listener.load('l_sl.pth')
     selfplay(speaker, listener)
