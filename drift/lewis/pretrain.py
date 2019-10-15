@@ -1,6 +1,6 @@
 import torch
 from torch.distributions import Categorical
-from drift.lewis.core import LewisGame, eval_loop
+from drift.lewis.core import LewisGame, eval_loop, get_comm_acc
 from drift.lewis.linear import Listener, Speaker
 
 VAL_BATCH_SIZE = 1000
@@ -65,6 +65,7 @@ def train(train_batch_size, train_steps, train_size):
             if step % LOG_STEPS == 0:
                 stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
                                      speaker=speaker)
+                stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
                 logstr = ["epoch {}:".format(step)]
                 for name, val in stats.items():
                     logstr.append("{}: {:.4f}".format(name, val))
@@ -74,16 +75,16 @@ def train(train_batch_size, train_steps, train_size):
 
     stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
                          speaker=speaker)
-    logstr = ["epoch {}:".format(step)]
+    stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
+    return speaker, listener, stats
+
+
+if __name__ == '__main__':
+    speaker, listener, stats = train(50, 100, 100)
+    logstr = ["epoch {}:".format(100)]
     for name, val in stats.items():
         logstr.append("{}: {:.4f}".format(name, val))
         # writer.add_scalar(name, val, epoch)
     print(' '.join(logstr))
-
-    return speaker, listener
-
-
-if __name__ == '__main__':
-    speaker, listener = train(50, 100, 100)
     speaker.save('s_sl.pth')
     listener.save('l_sl.pth')
