@@ -16,9 +16,7 @@ GUMBEL_TEMP = 0.1  # Temperature for gumbel softmax
 LOG_NAME = 'log_gumbel'
 
 
-def main():
-    speaker = Speaker.load(SPEAKER_CKPT)
-    listener = Listener.load(LISTENER_CKPT)
+def selfplay(speaker, listener):
     game = LewisGame(**speaker.env_config)
     dset = Dataset(game, 1)
 
@@ -70,4 +68,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    speaker = Speaker.load(SPEAKER_CKPT)
+    listener = Listener.load(LISTENER_CKPT)
+    selfplay(speaker, listener)
