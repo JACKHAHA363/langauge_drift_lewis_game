@@ -10,7 +10,7 @@ from torch.distributions import Categorical
 SPEAKER_CKPT = "./s_sl.pth"
 LISTENER_CKPT = './l_sl.pth'
 TRAIN_STEPS = 10000
-BATCH_SIZE = 500
+BATCH_SIZE = 100
 LOG_STEPS = 50
 GUMBEL_TEMP = 0.1  # Temperature for gumbel softmax
 LOG_NAME = 'log_gumbel'
@@ -34,11 +34,13 @@ def main():
                                           speaker=speaker)
             writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
-            logstr = ["epoch {}:".format(step)]
+            logstr = ["step {}:".format(step)]
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))
                 writer.add_scalar(name, val, step)
             print(' '.join(logstr))
+            if stats['comm_acc'] == 1:
+                break
 
         # Generate batch
         objs = game.get_random_objs(BATCH_SIZE)
