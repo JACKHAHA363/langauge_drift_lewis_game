@@ -10,11 +10,10 @@ from torch.distributions import Categorical
 TRAIN_STEPS = 10000
 BATCH_SIZE = 100
 LOG_STEPS = 10
-GUMBEL_TEMP = 0.1  # Temperature for gumbel softmax
 LOG_NAME = 'log_gumbel'
 
 
-def selfplay(speaker, listener):
+def selfplay(speaker, listener, gumbel_temperature=0.1):
     game = LewisGame(**speaker.env_config)
     dset = Dataset(game, 1)
 
@@ -36,13 +35,14 @@ def selfplay(speaker, listener):
                 writer.add_scalar(name, val, step)
             print(' '.join(logstr))
             if stats['comm_acc'] == 1:
-                break
+                stats['step'] = step
+                return stats
 
         # Generate batch
         objs = game.get_random_objs(BATCH_SIZE)
         s_logits = speaker(objs)
 
-        y = torch.nn.functional.softmax(s_logits / GUMBEL_TEMP, dim=-1)
+        y = torch.nn.functional.softmax(s_logits / gumbel_temperature, dim=-1)
         g = torch.distributions.Gumbel(loc=0, scale=1).sample(y.shape)
         msgs = torch.argmax(torch.log(y) + g, dim=-1)
 
@@ -64,8 +64,17 @@ def selfplay(speaker, listener):
         y.backward(oh_msgs.grad)
         s_opt.step()
 
+    stats, s_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
+                                  speaker=speaker)
+    stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
+    stats['step'] = TRAIN_STEPS
+    return stats
 
 if __name__ == '__main__':
     speaker = Speaker.load('s_sl.pth')
     listener = Listener.load('l_sl.pth')
-    selfplay(speaker, listener)
+    stats = selfplay(speaker, listener)
+    logstr = []
+    for name, val in stats.items():
+        logstr.append("{}: {:.4f}".format(name, val))
+    print(' '.join(logstr))
