@@ -4,10 +4,10 @@ from drift.lewis.core import LewisGame, eval_loop
 from drift.lewis.linear import Listener, Speaker
 
 TRAIN_SIZE = 100
-TRAIN_BATCH_SIZE = 5
+TRAIN_BATCH_SIZE = 50
+TRAIN_STEPS = 100
 VAL_BATCH_SIZE = 1000
-NB_EPOCHS = 2
-LOG_STEPS = 1
+LOG_STEPS = 100
 
 
 class Dataset:
@@ -36,20 +36,19 @@ class Dataset:
             start += batch_size
 
 
-def train_loop(l_opt, listener, s_opt, speaker, train_generator):
+def train_batch(l_opt, listener, s_opt, speaker, objs, msgs):
     """ Perform a train step """
-    for train_objs, train_msgs in train_generator:
-        s_logits = speaker(train_objs)
-        s_logprobs = Categorical(logits=s_logits).log_prob(train_msgs)
-        s_opt.zero_grad()
-        (-s_logprobs.mean()).backward()
-        s_opt.step()
+    s_logits = speaker(objs)
+    s_logprobs = Categorical(logits=s_logits).log_prob(msgs)
+    s_opt.zero_grad()
+    (-s_logprobs.mean()).backward()
+    s_opt.step()
 
-        l_logits = listener(listener.one_hot(train_msgs))
-        l_logprobs = Categorical(logits=l_logits).log_prob(train_objs)
-        l_opt.zero_grad()
-        (-l_logprobs.mean()).backward()
-        l_opt.step()
+    l_logits = listener(listener.one_hot(msgs))
+    l_logprobs = Categorical(logits=l_logits).log_prob(objs)
+    l_opt.zero_grad()
+    (-l_logprobs.mean()).backward()
+    l_opt.step()
 
 
 def main():
@@ -62,20 +61,31 @@ def main():
     listener = Listener(env_config)
     l_opt = torch.optim.Adam(lr=5e-4, params=listener.parameters())
     # writer = SummaryWriter('log_pretrain')
-    for epoch in range(NB_EPOCHS):
-        if epoch % LOG_STEPS == 0:
-            stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
-                                 speaker=speaker)
-            logstr = ["epoch {}:".format(epoch)]
-            for name, val in stats.items():
-                logstr.append("{}: {:.4f}".format(name, val))
-                # writer.add_scalar(name, val, epoch)
-            print(' '.join(logstr))
+    step = 0
+    while step < TRAIN_STEPS:
+        for objs, msgs in dset.train_generator(TRAIN_BATCH_SIZE):
+            train_batch(l_opt, listener, s_opt, speaker, objs, msgs)
+            if step % LOG_STEPS == 0:
+                stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
+                                     speaker=speaker)
+                logstr = ["epoch {}:".format(step)]
+                for name, val in stats.items():
+                    logstr.append("{}: {:.4f}".format(name, val))
+                    # writer.add_scalar(name, val, epoch)
+                print(' '.join(logstr))
+            step += 1
 
-        train_loop(l_opt, listener, s_opt, speaker, dset.train_generator(TRAIN_BATCH_SIZE))
+    stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
+                         speaker=speaker)
+    logstr = ["epoch {}:".format(step)]
+    for name, val in stats.items():
+        logstr.append("{}: {:.4f}".format(name, val))
+        # writer.add_scalar(name, val, epoch)
+    print(' '.join(logstr))
 
-    speaker.save('s_sl.pth')
-    listener.save('l_sl.pth')
+    model_name_template = "size_{}_steps_{}_batch_{}.pth"
+    speaker.save('s_' + model_name_template.format(TRAIN_SIZE, TRAIN_STEPS, TRAIN_BATCH_SIZE))
+    listener.save('l_' + model_name_template.format(TRAIN_SIZE, TRAIN_STEPS, TRAIN_BATCH_SIZE))
 
 
 if __name__ == '__main__':
