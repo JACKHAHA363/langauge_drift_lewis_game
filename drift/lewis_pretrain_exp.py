@@ -6,9 +6,9 @@ from drift.lewis.gumbel import selfplay
 from itertools import product
 from pandas import DataFrame
 
-batch_sizes = [5, 10, 30, 50]
-train_sizes = [50, 100, 150, 200]
-train_stepss = [50, 100, 150, 200]
+batch_sizes = [5, 25, 45]
+train_sizes = [50, 100, 150]
+train_stepss = [20, 50, 80, 100]
 
 statss = []
 for batch_size, train_size, train_step in product(batch_sizes, train_sizes, train_stepss):
