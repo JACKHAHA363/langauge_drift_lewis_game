@@ -7,6 +7,7 @@ from itertools import product
 from drift.lewis import USE_GPU, EVALUATION_RATIO
 from abc import abstractmethod
 import numpy as np
+from tqdm import tqdm
 
 
 class LewisGame:
@@ -100,7 +101,7 @@ def eval_loop(val_generator, listener, speaker):
     # Add speaker confusion matrix
     vocab_size = listener.env_config['p'] * listener.env_config['t']
     s_conf_mat = torch.zeros([vocab_size, vocab_size])
-    for objs, msgs in val_generator:
+    for objs, msgs in tqdm(val_generator):
         with torch.no_grad():
             l_logits = listener(listener.one_hot(msgs))
             l_pred = torch.argmax(l_logits, dim=-1)
@@ -146,7 +147,7 @@ class Dataset:
         while start < len(objs):
             batch_objs, batch_msgs = objs[start: start + batch_size], msgs[start: start + batch_size]
             if USE_GPU:
-                batch_objs = batch_size.cuda()
+                batch_objs = batch_objs.cuda()
                 batch_msgs = batch_msgs.cuda()
             yield batch_objs, batch_msgs
             start += batch_size

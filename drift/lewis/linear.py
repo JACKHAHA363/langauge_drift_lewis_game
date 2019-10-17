@@ -3,6 +3,7 @@
 """
 from drift.lewis.core import BaseSpeaker, BaseListener
 import torch
+from drift.lewis import USE_GPU
 
 
 class Speaker(BaseSpeaker):
@@ -23,6 +24,7 @@ class Speaker(BaseSpeaker):
         :param oh_objs [bsz, nb_props * nb_types]
         """
         oh_objs = torch.Tensor(size=[objs.shape[0], objs.shape[1], self.env_config['t']])
+        oh_objs = oh_objs.to(device=objs.device)
         oh_objs.zero_()
         oh_objs.scatter_(2, objs.unsqueeze(-1), 1)
         return oh_objs.view([objs.shape[0], -1])
@@ -44,6 +46,7 @@ class Listener(BaseListener):
         :return: [bsz, nb_props, vocab_size]
         """
         oh_msgs = torch.Tensor(size=[msgs.shape[0], msgs.shape[1], self.env_config['p'] * self.env_config['t']])
+        oh_msgs = oh_msgs.to(device=msgs.device)
         oh_msgs.zero_()
         oh_msgs.scatter_(2, msgs.unsqueeze(-1), 1)
         return oh_msgs
