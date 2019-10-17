@@ -6,21 +6,17 @@ from drift.lewis.gumbel import selfplay
 from itertools import product
 from pandas import DataFrame
 
-batch_sizes = [5, 25, 45]
-train_sizes = [50, 100, 150]
-train_stepss = [20, 50, 80, 100]
+train_sizes = [20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
 
 statss = []
-for batch_size, train_size, train_step in product(batch_sizes, train_sizes, train_stepss):
-    print(batch_size, train_size, train_step)
-    speaker, listener, pretrain_stats = train(train_batch_size=batch_size, train_steps=train_step,
+for train_size in train_sizes:
+    print(train_size)
+    speaker, listener, pretrain_stats = train(train_batch_size=5,
                                               train_size=train_size)
     selfplay_stats = selfplay(speaker=speaker, listener=listener)
     stats = {'sl/{}'.format(key): val for key, val in pretrain_stats.items()}
     stats.update({'sp/{}'.format(key): val for key, val in selfplay_stats.items()})
-    stats.update({'train_batch_size': batch_size,
-                  'train_size': train_size,
-                  'train_step': train_step})
+    stats.update({'train_size': train_size})
     statss.append(stats)
 
 # generate CSV
