@@ -1,52 +1,29 @@
 import torch
 from torch.distributions import Categorical
-from drift.lewis.core import LewisGame, eval_loop, get_comm_acc
+from drift.lewis.core import LewisGame, eval_loop, get_comm_acc, Dataset
 from drift.lewis.linear import Listener, Speaker
+from drift.lewis import USE_GPU
 import numpy as np
 
 VAL_BATCH_SIZE = 1000
 LOG_STEPS = 10
 
 
-class Dataset:
-    def __init__(self, game, train_size):
-        assert isinstance(game, LewisGame)
-        self.train_objs = game.get_random_objs(train_size)
-        self.train_msgs = game.objs_to_msg(self.train_objs)
-        self.train_size = train_size
-        self.game = game
-
-    def train_generator(self, batch_size):
-        return self._get_generator(self.train_objs, self.train_msgs, batch_size)
-
-    def val_generator(self, batch_size):
-        # Randomly sample from all objects
-        indices = torch.randint(len(self.game.all_objs), [5000]).long()
-        objs = self.game.all_objs[indices]
-        msgs = self.game.all_msgs[indices]
-        return self._get_generator(objs, msgs, batch_size)
-
-    @staticmethod
-    def _get_generator(objs, msgs, batch_size):
-        start = 0
-        while start < len(objs):
-            yield objs[start: start + batch_size], msgs[start: start + batch_size]
-            start += batch_size
+def train_listener_batch(listener, l_opt, objs, msgs):
+    l_logits = listener(listener.one_hot(msgs))
+    l_logprobs = Categorical(logits=l_logits).log_prob(objs)
+    l_opt.zero_grad()
+    (-l_logprobs.mean()).backward()
+    l_opt.step()
 
 
-def train_batch(l_opt, listener, s_opt, speaker, objs, msgs):
+def train_speaker_batch(speaker, s_opt, objs, msgs):
     """ Perform a train step """
     s_logits = speaker(objs)
     s_logprobs = Categorical(logits=s_logits).log_prob(msgs)
     s_opt.zero_grad()
     (-s_logprobs.mean()).backward()
     s_opt.step()
-
-    l_logits = listener(listener.one_hot(msgs))
-    l_logprobs = Categorical(logits=l_logits).log_prob(objs)
-    l_opt.zero_grad()
-    (-l_logprobs.mean()).backward()
-    l_opt.step()
 
 
 class EarlyStopper:
@@ -66,6 +43,11 @@ class EarlyStopper:
 
 
 def train(train_batch_size, train_size):
+    """ Given training batch size and train dataset size. Train two models
+    :returns
+        speaker, listener,
+        stats: A dictionary of stats
+    """
     env_config = LewisGame.get_default_config()
     game = LewisGame(**env_config)
     dset = Dataset(game, train_size)
@@ -74,17 +56,22 @@ def train(train_batch_size, train_size):
     s_opt = torch.optim.Adam(lr=5e-4, params=speaker.parameters())
     listener = Listener(env_config)
     l_opt = torch.optim.Adam(lr=5e-4, params=listener.parameters())
-    # writer = SummaryWriter('log_pretrain')
     step = 0
     estopper = EarlyStopper()
     should_stop = False
+
+    if USE_GPU:
+        speaker = speaker.cuda()
+        listener = listener.cuda()
+
     while True:
         if should_stop:
             print('Stop at {}'.format(step))
             break
 
         for objs, msgs in dset.train_generator(train_batch_size):
-            train_batch(l_opt, listener, s_opt, speaker, objs, msgs)
+            train_listener_batch(listener, l_opt, objs, msgs)
+            train_speaker_batch(speaker, s_opt, objs, msgs)
             step += 1
             if step % LOG_STEPS == 0:
                 stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
@@ -106,11 +93,11 @@ def train(train_batch_size, train_size):
 
 
 if __name__ == '__main__':
-    speaker, listener, stats = train(5, 20)
+    s, l, stats = train(5, 20)
     logstr = []
     for name, val in stats.items():
         logstr.append("{}: {:.4f}".format(name, val))
         # writer.add_scalar(name, val, epoch)
     print(' '.join(logstr))
-    speaker.save('s_sl.pth')
-    listener.save('l_sl.pth')
+    s.save('s_sl.pth')
+    l.save('l_sl.pth')

@@ -1,6 +1,6 @@
-from drift.lewis.core import LewisGame, get_comm_acc, eval_loop
-from drift.lewis.pretrain import Dataset
+from drift.lewis.core import LewisGame, get_comm_acc, eval_loop, Dataset
 from drift.lewis.linear import Speaker, Listener
+from drift.lewis import USE_GPU
 import torch
 import os
 from shutil import rmtree
@@ -14,6 +14,10 @@ LOG_NAME = 'log_gumbel'
 
 
 def selfplay(speaker, listener, gumbel_temperature=0.1):
+    """ Train speaker and listener with gumbel softmax. Return stats. """
+    if USE_GPU:
+        speaker = speaker.cuda()
+        listener = listener.cuda()
     game = LewisGame(**speaker.env_config)
     dset = Dataset(game, 1)
 
@@ -40,6 +44,8 @@ def selfplay(speaker, listener, gumbel_temperature=0.1):
 
         # Generate batch
         objs = game.get_random_objs(BATCH_SIZE)
+        if USE_GPU:
+            objs = objs.cuda()
         s_logits = speaker(objs)
 
         y = torch.nn.functional.softmax(s_logits / gumbel_temperature, dim=-1)
@@ -69,6 +75,7 @@ def selfplay(speaker, listener, gumbel_temperature=0.1):
     stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
     stats['step'] = TRAIN_STEPS
     return stats
+
 
 if __name__ == '__main__':
     speaker = Speaker.load('s_sl.pth')

@@ -4,7 +4,9 @@ Lewis Signal Game
 import torch
 import argparse
 from itertools import product
+from drift.lewis import USE_GPU, EVALUATION_RATIO
 from abc import abstractmethod
+import numpy as np
 
 
 class LewisGame:
@@ -114,3 +116,37 @@ def eval_loop(val_generator, listener, speaker):
                 s_conf_mat[m, pred] += 1
     s_conf_mat /= torch.sum(s_conf_mat, -1, keepdim=True)
     return {'l_acc': l_corrects / l_total, 's_acc': s_corrects / s_total}, s_conf_mat
+
+
+class Dataset:
+    """ The dataset object """
+    def __init__(self, game, train_size):
+        assert isinstance(game, LewisGame)
+        self.train_objs = game.get_random_objs(train_size)
+        self.train_msgs = game.objs_to_msg(self.train_objs)
+        self.train_size = train_size
+        self.game = game
+        self.all_indices = [i for i in range(len(game.all_objs))]
+
+    def train_generator(self, batch_size):
+        return self._get_generator(self.train_objs, self.train_msgs, batch_size)
+
+    def val_generator(self, batch_size):
+        """ Used for evaluation """
+        # Shuffled indices
+        np.random.shuffle(self.all_indices)
+        split = int(EVALUATION_RATIO * len(self.all_indices))
+        objs = self.game.all_objs[self.all_indices[:split]]
+        msgs = self.game.all_msgs[self.all_indices[:split]]
+        return self._get_generator(objs, msgs, batch_size)
+
+    @staticmethod
+    def _get_generator(objs, msgs, batch_size):
+        start = 0
+        while start < len(objs):
+            batch_objs, batch_msgs = objs[start: start + batch_size], msgs[start: start + batch_size]
+            if USE_GPU:
+                batch_objs = batch_objs.cuda()
+                batch_msgs = batch_msgs.cuda()
+            yield batch_objs, batch_msgs
+            start += batch_size
