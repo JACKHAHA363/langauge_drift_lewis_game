@@ -32,7 +32,7 @@ def compute_drift_stats(args):
     for s_acc, l_acc in product(S_ACCS, L_ACCS):
         speaker = Speaker.load('s_{}.pth'.format(s_acc))
         listener = Listener.load('l_{}.pth'.format(l_acc))
-        selfplay_stats = selfplay(speaker=speaker, listener=listener)
+        selfplay_stats, _, _ = selfplay(speaker=speaker, listener=listener)
         stats = {'sp/{}'.format(key): val for key, val in selfplay_stats.items()}
         stats.update({'sl/s_acc': s_acc,
                       'sl/l_acc': l_acc})

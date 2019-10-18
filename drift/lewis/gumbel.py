@@ -13,6 +13,33 @@ LOG_STEPS = 10
 LOG_NAME = 'log_gumbel'
 
 
+def selfplay_batch(game, gumbel_temperature, l_opt, listener, s_opt, speaker):
+    """ Generate a batch and play """
+    # Generate batch
+    objs = game.get_random_objs(BATCH_SIZE)
+    if USE_GPU:
+        objs = objs.cuda()
+    s_logits = speaker(objs)
+    y = torch.nn.functional.softmax(s_logits / gumbel_temperature, dim=-1)
+    g = torch.distributions.Gumbel(loc=0, scale=1).sample(y.shape)
+    msgs = torch.argmax(torch.log(y) + g, dim=-1)
+    # Get gradient to keep backprop to speaker
+    oh_msgs = listener.one_hot(msgs)
+    oh_msgs.requires_grad = True
+    oh_msgs.grad = None
+    l_logits = listener(oh_msgs)
+    # Train listener
+    l_logprobs = Categorical(logits=l_logits).log_prob(objs)
+    l_logprobs = l_logprobs.sum(-1)
+    l_opt.zero_grad()
+    (-l_logprobs.mean()).backward(retain_graph=True)
+    l_opt.step()
+    # Train Speaker
+    s_opt.zero_grad()
+    y.backward(oh_msgs.grad)
+    s_opt.step()
+
+
 def selfplay(speaker, listener, gumbel_temperature=0.1):
     """ Train speaker and listener with gumbel softmax. Return stats. """
     if USE_GPU:
@@ -42,45 +69,20 @@ def selfplay(speaker, listener, gumbel_temperature=0.1):
                 stats['step'] = step
                 return stats
 
-        # Generate batch
-        objs = game.get_random_objs(BATCH_SIZE)
-        if USE_GPU:
-            objs = objs.cuda()
-        s_logits = speaker(objs)
-
-        y = torch.nn.functional.softmax(s_logits / gumbel_temperature, dim=-1)
-        g = torch.distributions.Gumbel(loc=0, scale=1).sample(y.shape)
-        msgs = torch.argmax(torch.log(y) + g, dim=-1)
-
-        # Get gradient to keep backprop to speaker
-        oh_msgs = listener.one_hot(msgs)
-        oh_msgs.requires_grad = True
-        oh_msgs.grad = None
-        l_logits = listener(oh_msgs)
-
-        # Train listener
-        l_logprobs = Categorical(logits=l_logits).log_prob(objs)
-        l_logprobs = l_logprobs.sum(-1)
-        l_opt.zero_grad()
-        (-l_logprobs.mean()).backward(retain_graph=True)
-        l_opt.step()
-
-        # Train Speaker
-        s_opt.zero_grad()
-        y.backward(oh_msgs.grad)
-        s_opt.step()
+        # Train for a batch
+        selfplay_batch(game, gumbel_temperature, l_opt, listener, s_opt, speaker)
 
     stats, s_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
                                   speaker=speaker)
     stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
     stats['step'] = TRAIN_STEPS
-    return stats
+    return stats, speaker, listener
 
 
 if __name__ == '__main__':
     speaker = Speaker.load('s_sl.pth')
     listener = Listener.load('l_sl.pth')
-    stats = selfplay(speaker, listener)
+    stats, speaker, listener = selfplay(speaker, listener)
     logstr = []
     for name, val in stats.items():
         logstr.append("{}: {:.4f}".format(name, val))
