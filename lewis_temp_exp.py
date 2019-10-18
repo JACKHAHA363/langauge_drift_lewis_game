@@ -11,7 +11,7 @@ temperatures = [0.1, 0.2, 0.3, 0.4, 0.5]
 statss = []
 for temperature in temperatures:
     speaker, listener, _ = train(train_batch_size=5, train_steps=50, train_size=100)
-    selfplay_stats = selfplay(speaker=speaker, listener=listener, gumbel_temperature=temperature)
+    selfplay_stats, _, _ = selfplay(speaker=speaker, listener=listener, gumbel_temperature=temperature)
     stats = {}
     stats.update({'sp/{}'.format(key): val for key, val in selfplay_stats.items()})
     stats.update({'gumbel_temperature': temperature})
