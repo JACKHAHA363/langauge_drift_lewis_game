@@ -115,7 +115,8 @@ def eval_listener_loop(val_generator, listener):
     return {'l_acc': l_corrects / l_total}
 
 
-def eval_loop(val_generator, listener, speaker):
+def eval_loop(val_generator, listener, speaker, game):
+    """ Return accuracy as well as confusion matrix for symbols """
     l_corrects = 0
     l_total = 0
     s_corrects = 0
@@ -124,6 +125,7 @@ def eval_loop(val_generator, listener, speaker):
     # Add speaker confusion matrix
     vocab_size = listener.env_config['p'] * listener.env_config['t']
     s_conf_mat = torch.zeros([vocab_size, vocab_size])
+    l_conf_mat = torch.zeros([vocab_size, vocab_size])
     for objs, msgs in val_generator:
         with torch.no_grad():
             l_logits = listener(listener.one_hot(msgs))
@@ -138,8 +140,13 @@ def eval_loop(val_generator, listener, speaker):
 
             for m, pred in zip(msgs.view(-1), s_pred.view(-1)):
                 s_conf_mat[m, pred] += 1
+
+            for m, pred in zip(msgs.view(-1), game.objs_to_msg(l_pred).view(-1)):
+                l_conf_mat[m, pred] += 1
+
     s_conf_mat /= torch.sum(s_conf_mat, -1, keepdim=True)
-    return {'l_acc': l_corrects / l_total, 's_acc': s_corrects / s_total}, s_conf_mat
+    l_conf_mat /= torch.sum(l_conf_mat, -1, keepdim=True)
+    return {'l_acc': l_corrects / l_total, 's_acc': s_corrects / s_total}, s_conf_mat, l_conf_mat
 
 
 class Dataset:

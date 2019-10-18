@@ -56,9 +56,10 @@ def selfplay(speaker, listener, gumbel_temperature=0.1):
 
     for step in range(TRAIN_STEPS):
         if step % LOG_STEPS == 0:
-            stats, s_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
-                                          speaker=speaker)
+            stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
+                                                      speaker=speaker, game=game)
             writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
+            writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
             logstr = ["step {}:".format(step)]
             for name, val in stats.items():
@@ -67,13 +68,13 @@ def selfplay(speaker, listener, gumbel_temperature=0.1):
             print(' '.join(logstr))
             if stats['comm_acc'] > 0.98:
                 stats['step'] = step
-                return stats
+                break
 
         # Train for a batch
         selfplay_batch(game, gumbel_temperature, l_opt, listener, s_opt, speaker)
 
-    stats, s_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
-                                  speaker=speaker)
+    stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
+                                              speaker=speaker, game=game)
     stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
     stats['step'] = TRAIN_STEPS
     return stats, speaker, listener

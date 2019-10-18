@@ -139,8 +139,8 @@ def train(train_batch_size, train_size):
             train_speaker_batch(speaker, s_opt, objs, msgs)
             step += 1
             if step % LOG_STEPS == 0:
-                stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
-                                     speaker=speaker)
+                stats, _, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
+                                        speaker=speaker, game=game)
                 stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
                 logstr = ["epoch {}:".format(step)]
                 for name, val in stats.items():
@@ -151,8 +151,8 @@ def train(train_batch_size, train_size):
                     should_stop = True
                     break
 
-    stats, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
-                         speaker=speaker)
+    stats, _, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
+                            speaker=speaker, game=game)
     stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
     return speaker, listener, stats
 
