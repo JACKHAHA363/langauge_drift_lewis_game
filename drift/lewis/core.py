@@ -90,6 +90,30 @@ def get_comm_acc(val_generator, listener, speaker):
             total += objs.numel()
     return {'comm_acc': corrects / total}
 
+def eval_speaker_loop(val_generator, speaker):
+    """ Return stats """
+    s_corrects = 0
+    s_total = 0
+    for objs, msgs in val_generator:
+        with torch.no_grad():
+            s_logits = speaker(objs)
+            s_pred = torch.argmax(s_logits, dim=-1)
+            s_corrects += (s_pred == msgs).float().sum().item()
+            s_total += msgs.numel()
+    return {'s_acc': s_corrects / s_total}
+
+
+def eval_listener_loop(val_generator, listener):
+    l_corrects = 0
+    l_total = 0
+    for objs, msgs in val_generator:
+        with torch.no_grad():
+            l_logits = listener(listener.one_hot(msgs))
+            l_pred = torch.argmax(l_logits, dim=-1)
+            l_corrects += (l_pred == objs).float().sum().item()
+            l_total += objs.numel()
+    return {'l_acc': l_corrects / l_total}
+
 
 def eval_loop(val_generator, listener, speaker):
     l_corrects = 0

@@ -6,12 +6,12 @@ from drift.lewis.gumbel import selfplay
 from itertools import product
 from pandas import DataFrame
 
-train_sizes = [20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
+train_sizes = [40, 60, 80, 100, 120, 140, 160, 180, 200]
 
 statss = []
 for train_size in train_sizes:
     print(train_size)
-    speaker, listener, pretrain_stats = train(train_batch_size=5,
+    speaker, listener, pretrain_stats = train(train_batch_size=10,
                                               train_size=train_size)
     selfplay_stats = selfplay(speaker=speaker, listener=listener)
     stats = {'sl/{}'.format(key): val for key, val in pretrain_stats.items()}
