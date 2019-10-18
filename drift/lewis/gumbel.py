@@ -7,7 +7,7 @@ from shutil import rmtree
 from tensorboardX import SummaryWriter
 from torch.distributions import Categorical
 
-TRAIN_STEPS = 2500
+TRAIN_STEPS = 10000
 BATCH_SIZE = 500
 LOG_STEPS = 10
 LOG_NAME = 'log_gumbel'
@@ -38,7 +38,7 @@ def selfplay(speaker, listener, gumbel_temperature=0.1):
                 logstr.append("{}: {:.4f}".format(name, val))
                 writer.add_scalar(name, val, step)
             print(' '.join(logstr))
-            if stats['comm_acc'] > 0.99:
+            if stats['comm_acc'] > 0.98:
                 stats['step'] = step
                 return stats
 

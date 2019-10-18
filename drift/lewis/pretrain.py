@@ -58,7 +58,7 @@ def train_speaker_until(acc):
         if should_stop:
             break
 
-        for objs, msgs in dset.train_generator(20):
+        for objs, msgs in dset.train_generator(5):
             train_speaker_batch(speaker, s_opt, objs, msgs)
             step += 1
             if step % LOG_STEPS == 0:
@@ -91,7 +91,7 @@ def train_listener_until(acc):
         if should_stop:
             break
 
-        for objs, msgs in dset.train_generator(20):
+        for objs, msgs in dset.train_generator(5):
             train_listener_batch(listener, l_opt, objs, msgs)
             step += 1
             stats = eval_listener_loop(dset.val_generator(VAL_BATCH_SIZE),
