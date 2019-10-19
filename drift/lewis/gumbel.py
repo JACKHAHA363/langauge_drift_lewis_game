@@ -78,13 +78,3 @@ def selfplay(speaker, listener, gumbel_temperature=0.1):
     stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
     stats['step'] = TRAIN_STEPS
     return stats, speaker, listener
-
-
-if __name__ == '__main__':
-    speaker = Speaker.load('s_sl.pth')
-    listener = Listener.load('l_sl.pth')
-    stats, speaker, listener = selfplay(speaker, listener)
-    logstr = []
-    for name, val in stats.items():
-        logstr.append("{}: {:.4f}".format(name, val))
-    print(' '.join(logstr))
