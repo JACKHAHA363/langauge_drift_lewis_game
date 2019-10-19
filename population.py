@@ -80,7 +80,7 @@ def population_selfplay(args):
         # Eval and Logging
         if step % LOG_STEPS == 0:
             stats, _, _ = eval_loop(dset.val_generator(1000), listener=listener,
-                                                      speaker=speaker, game=game)
+                                    speaker=speaker, game=game)
             #writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
             #writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
