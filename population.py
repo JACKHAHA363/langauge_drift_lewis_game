@@ -21,6 +21,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-prepare', action='store_true', help='prepare population')
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
+    parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-n', default=3, help="population size")
     return parser.parse_args()
 
@@ -66,7 +67,7 @@ def population_selfplay(args):
     s_and_opts, l_and_opts = _load_population_and_opts(args, s_ckpts, l_ckpts)
     game = LewisGame(**s_and_opts[0][0].env_config)
     dset = Dataset(game, 1)
-    writer = SummaryWriter('log_population')
+    writer = SummaryWriter(args.logdir)
 
     # Training
     for step in range(STEPS):
