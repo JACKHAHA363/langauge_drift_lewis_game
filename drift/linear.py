@@ -1,9 +1,8 @@
 """
 2-layer linear model like in ICLR paper
 """
-from drift.lewis.core import BaseSpeaker, BaseListener
+from drift.core import BaseSpeaker, BaseListener
 import torch
-from drift.lewis import USE_GPU
 
 
 class Speaker(BaseSpeaker):

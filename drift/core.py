@@ -2,10 +2,8 @@
 Lewis Signal Game
 """
 import torch
-import argparse
 from itertools import product
-from drift.lewis import USE_GPU, EVALUATION_RATIO
-from abc import abstractmethod
+from drift import USE_GPU, EVALUATION_RATIO
 import numpy as np
 
 
@@ -90,6 +88,7 @@ def get_comm_acc(val_generator, listener, speaker):
             total += objs.numel()
     return {'comm_acc': corrects / total}
 
+
 def eval_speaker_loop(val_generator, speaker):
     """ Return stats """
     s_corrects = 0
@@ -151,6 +150,7 @@ def eval_loop(val_generator, listener, speaker, game):
 
 class Dataset:
     """ The dataset object """
+
     def __init__(self, game, train_size):
         assert isinstance(game, LewisGame)
         self.train_objs = game.get_random_objs(train_size)

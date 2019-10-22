@@ -1,8 +1,8 @@
 import torch
 from torch.distributions import Categorical
-from drift.lewis.core import LewisGame, eval_loop, get_comm_acc, Dataset, eval_listener_loop, eval_speaker_loop
-from drift.lewis.linear import Listener, Speaker
-from drift.lewis import USE_GPU
+from drift.core import LewisGame, eval_loop, get_comm_acc, Dataset, eval_listener_loop, eval_speaker_loop
+from drift.linear import Listener, Speaker
+from drift import USE_GPU
 import numpy as np
 
 VAL_BATCH_SIZE = 1000

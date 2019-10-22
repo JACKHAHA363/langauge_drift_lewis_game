@@ -1,9 +1,9 @@
 """
 Check how supervise pretraining effect the language drift in lewis
 """
-from drift.lewis.pretrain import train_speaker_until, train_listener_until
-from baseline import selfplay
-from drift.lewis.linear import Speaker, Listener
+from drift.pretrain import train_speaker_until, train_listener_until
+from run_gumbel import selfplay
+from drift.linear import Speaker, Listener
 from itertools import product
 from pandas import DataFrame
 import argparse

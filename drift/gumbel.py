@@ -1,4 +1,4 @@
-from drift.lewis import USE_GPU
+from drift import USE_GPU
 import torch
 from torch.distributions import Categorical
 
