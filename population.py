@@ -7,11 +7,10 @@ import argparse
 import random
 import torch
 from tensorboardX import SummaryWriter
-from drift.lewis.core import LewisGame, Dataset, eval_loop, get_comm_acc
-from drift.lewis.pretrain import train_listener_until, train_speaker_until
-from drift.lewis.linear import Listener, Speaker
-from drift.lewis.gumbel import selfplay_batch
-
+from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
+from drift.pretrain import train_listener_until, train_speaker_until
+from drift.linear import Listener, Speaker
+from drift.gumbel import selfplay_batch
 
 STEPS = 10000
 LOG_STEPS = 10
@@ -52,6 +51,7 @@ def _load_population_and_opts(args, s_ckpts, l_ckpts):
         l_and_opts.append([listener, l_opt])
     return s_and_opts, l_and_opts
 
+
 def population_selfplay(args):
     """ Load checkpoints """
     # Make sure it's valid ckpt dirs
@@ -82,8 +82,8 @@ def population_selfplay(args):
         if step % LOG_STEPS == 0:
             stats, _, _ = eval_loop(dset.val_generator(1000), listener=listener,
                                     speaker=speaker, game=game)
-            #writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
-            #writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
+            # writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
+            # writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
             logstr = ["step {}:".format(step)]
             for name, val in stats.items():

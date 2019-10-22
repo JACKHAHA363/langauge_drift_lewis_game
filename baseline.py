@@ -5,10 +5,10 @@ import torch
 import os
 from shutil import rmtree
 from tensorboardX import SummaryWriter
-from drift.lewis import USE_GPU
-from drift.lewis.core import LewisGame, get_comm_acc, eval_loop, Dataset
-from drift.lewis.gumbel import selfplay_batch
-from drift.lewis.linear import Speaker, Listener
+from drift import USE_GPU
+from drift.core import LewisGame, get_comm_acc, eval_loop, Dataset
+from drift.gumbel import selfplay_batch
+from drift.linear import Speaker, Listener
 import argparse
 
 TRAIN_STEPS = 10000

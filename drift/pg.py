@@ -1,5 +1,5 @@
-from drift.lewis.core import LewisGame, get_comm_acc, eval_loop, Dataset
-from drift.lewis.linear import Speaker, Listener
+from drift.core import LewisGame, get_comm_acc, eval_loop, Dataset
+from drift.linear import Speaker, Listener
 import torch
 import os
 from shutil import rmtree
