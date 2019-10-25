@@ -15,7 +15,7 @@ TRAIN_STEPS = 10000
 LOG_STEPS = 10
 
 
-def selfplay(args, speaker, listener, gumbel_temperature=0.1):
+def selfplay(speaker, listener, gumbel_temperature=0.1, tb_writer=None):
     """ Train speaker and listener with gumbel softmax. Return stats. """
     if USE_GPU:
         speaker = speaker.cuda()
@@ -25,21 +25,18 @@ def selfplay(args, speaker, listener, gumbel_temperature=0.1):
 
     s_opt = torch.optim.Adam(lr=5e-5, params=speaker.parameters())
     l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
-    if os.path.exists(args.log):
-        rmtree(args.log)
-    writer = SummaryWriter(args.log)
 
     for step in range(TRAIN_STEPS):
         if step % LOG_STEPS == 0:
             stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
                                                       speaker=speaker, game=game)
-            writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
-            writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
+            tb_writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
+            tb_writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
             logstr = ["step {}:".format(step)]
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))
-                writer.add_scalar(name, val, step)
+                tb_writer.add_scalar(name, val, step)
             print(' '.join(logstr))
             if stats['comm_acc'] > 0.98:
                 stats['step'] = step
@@ -67,7 +64,10 @@ if __name__ == '__main__':
     args = get_args()
     speaker = Speaker.load(args.speaker)
     listener = Listener.load(args.listener)
-    stats, speaker, listener = selfplay(args, speaker, listener)
+    if os.path.exists(args.log):
+        rmtree(args.log)
+    writer = SummaryWriter(args.log)
+    stats, speaker, listener = selfplay(args, speaker, listener, writer)
     logstr = []
     for name, val in stats.items():
         logstr.append("{}: {:.4f}".format(name, val))
