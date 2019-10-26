@@ -30,7 +30,7 @@ def main(args):
                                                   speaker=speaker, game=game)
             sdata.append(torch.diag(s_conf_mat))
             ldata.append(torch.diag(l_conf_mat))
-        selfplay_batch(game, 0.1, l_opt, listener, s_opt, speaker)
+        selfplay_batch(game, 1, l_opt, listener, s_opt, speaker)
 
     # [NB_data, vocab_size]
     sdata = torch.stack(sdata)

@@ -12,7 +12,7 @@ from drift.pretrain import train_listener_until, train_speaker_until
 from drift.linear import Listener, Speaker
 from drift.gumbel import selfplay_batch
 
-STEPS = 10000
+STEPS = 1000000
 LOG_STEPS = 10
 
 
@@ -76,7 +76,7 @@ def population_selfplay(args):
         listener, l_opt = random.choice(l_and_opts)
 
         # Train for a Batch
-        selfplay_batch(game, 0.1, l_opt, listener, s_opt, speaker)
+        selfplay_batch(game, 1, l_opt, listener, s_opt, speaker)
 
         # Eval and Logging
         if step % LOG_STEPS == 0:
