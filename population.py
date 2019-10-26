@@ -90,7 +90,7 @@ def population_selfplay(args):
                 logstr.append("{}: {:.4f}".format(name, val))
                 writer.add_scalar(name, val, step)
             print(' '.join(logstr))
-            if stats['comm_acc'] > 0.98:
+            if stats['comm_acc'] == 1.:
                 stats['step'] = step
                 break
 
