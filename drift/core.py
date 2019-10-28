@@ -157,18 +157,29 @@ class Dataset:
         self.train_msgs = game.objs_to_msg(self.train_objs)
         self.train_size = train_size
         self.game = game
+
+        # Shuffle all objects index
         self.all_indices = [i for i in range(len(game.all_objs))]
+        np.random.shuffle(self.all_indices)
+        self.valid_start = 0
 
     def train_generator(self, batch_size):
         return self._get_generator(self.train_objs, self.train_msgs, batch_size)
 
     def val_generator(self, batch_size):
-        """ Used for evaluation """
-        # Shuffled indices
-        np.random.shuffle(self.all_indices)
+        """ Used for evaluation. For each validation loop, randomly pick EVALUATION_RATIO * total_objects
+        """
         split = int(EVALUATION_RATIO * len(self.all_indices))
-        objs = self.game.all_objs[self.all_indices[:split]]
-        msgs = self.game.all_msgs[self.all_indices[:split]]
+        valid_ids = self.all_indices[self.valid_start: self.valid_start + split]
+        self.valid_start += split
+
+        # Reset valid_start if exceeding limit
+        if self.valid_start >= len(self.all_indices):
+            self.valid_start = 0
+
+        # Take the validation data
+        objs = self.game.all_objs[valid_ids]
+        msgs = self.game.all_msgs[valid_ids]
         return self._get_generator(objs, msgs, batch_size)
 
     @staticmethod

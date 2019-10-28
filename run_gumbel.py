@@ -11,11 +11,11 @@ from drift.gumbel import selfplay_batch
 from drift.linear import Speaker, Listener
 import argparse
 
-TRAIN_STEPS = 10000
-LOG_STEPS = 10
+TRAIN_STEPS = 50000
+LOG_STEPS = 100
 
 
-def selfplay(speaker, listener, gumbel_temperature=0.1, tb_writer=None):
+def selfplay(speaker, listener, gumbel_temperature=1, tb_writer=None):
     """ Train speaker and listener with gumbel softmax. Return stats. """
     if USE_GPU:
         speaker = speaker.cuda()
@@ -38,7 +38,7 @@ def selfplay(speaker, listener, gumbel_temperature=0.1, tb_writer=None):
                 logstr.append("{}: {:.4f}".format(name, val))
                 tb_writer.add_scalar(name, val, step)
             print(' '.join(logstr))
-            if stats['comm_acc'] > 0.98:
+            if stats['comm_acc'] == 1:
                 stats['step'] = step
                 break
 
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     if os.path.exists(args.log):
         rmtree(args.log)
     writer = SummaryWriter(args.log)
-    stats, speaker, listener = selfplay(args, speaker, listener, writer)
+    stats, speaker, listener = selfplay(speaker, listener, tb_writer=writer)
     logstr = []
     for name, val in stats.items():
         logstr.append("{}: {:.4f}".format(name, val))
