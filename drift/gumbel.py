@@ -5,7 +5,13 @@ import torch.nn.functional as F
 
 BATCH_SIZE = 500
 
-GUMBEL_DIST = torch.distributions.Gumbel(loc=0, scale=1)
+# Generate the distribution for sampling
+loc = torch.tensor(0.)
+scale = torch.tensor(1.)
+if USE_GPU:
+    GUMBEL_DIST = torch.distributions.Gumbel(loc=loc.cuda(), scale=scale.cuda())
+else:
+    GUMBEL_DIST = torch.distributions.Gumbel(loc=loc, scale=scale)
 
 
 def selfplay_batch(game, gumbel_temperature, l_opt, listener, s_opt, speaker):
