@@ -4,6 +4,7 @@ Lewis Signal Game
 import torch
 from itertools import product
 from drift import USE_GPU, EVALUATION_RATIO
+from drift.utils import timeit
 import numpy as np
 
 
@@ -83,6 +84,7 @@ class BaseListener(Agent):
         return self.forward(msgs)
 
 
+@timeit('get_comm_acc')
 def get_comm_acc(val_generator, listener, speaker):
     corrects = 0
     total = 0
@@ -122,6 +124,7 @@ def eval_listener_loop(val_generator, listener):
     return {'l_acc': l_corrects / l_total}
 
 
+@timeit('eval_loop')
 def eval_loop(val_generator, listener, speaker, game):
     """ Return accuracy as well as confusion matrix for symbols """
     l_corrects = 0
