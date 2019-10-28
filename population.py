@@ -14,7 +14,7 @@ from drift.linear import Listener, Speaker
 from drift.gumbel import selfplay_batch
 from drift import USE_GPU
 
-STEPS = 20000
+STEPS = 40000
 LOG_STEPS = 100
 
 
