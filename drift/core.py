@@ -4,6 +4,7 @@ Lewis Signal Game
 import torch
 from itertools import product
 from drift import USE_GPU, EVALUATION_RATIO
+from drift.utils import timeit
 import numpy as np
 
 
@@ -19,7 +20,16 @@ class LewisGame:
         self.p = p
         self.t = t
         self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])
+
+        # The offset vector of converting to msg
+        self.msg_offset = torch.Tensor([i for i in range(self.p)]).long() * self.t
         self.all_msgs = self.objs_to_msg(self.all_objs)
+
+        # Move to GPU
+        if USE_GPU:
+            self.all_objs = self.all_objs.cuda()
+            self.all_msgs = self.all_msgs.cuda()
+            self.msg_offset = self.msg_offset.cuda()
 
     def get_random_objs(self, batch_size):
         indices = torch.randint(len(self.all_objs), size=[batch_size]).long()
@@ -34,8 +44,7 @@ class LewisGame:
         :param [bsz, nb_props]
         :return [bsz, nb_props]
         """
-        addition = torch.Tensor([i for i in range(self.p)]).long()
-        return objs + addition.unsqueeze(0) * self.t
+        return objs + self.msg_offset.unsqueeze(0)
 
 
 class Agent(torch.nn.Module):
@@ -75,6 +84,7 @@ class BaseListener(Agent):
         return self.forward(msgs)
 
 
+@timeit('get_comm_acc')
 def get_comm_acc(val_generator, listener, speaker):
     corrects = 0
     total = 0
@@ -114,6 +124,7 @@ def eval_listener_loop(val_generator, listener):
     return {'l_acc': l_corrects / l_total}
 
 
+@timeit('eval_loop')
 def eval_loop(val_generator, listener, speaker, game):
     """ Return accuracy as well as confusion matrix for symbols """
     l_corrects = 0
@@ -137,11 +148,8 @@ def eval_loop(val_generator, listener, speaker, game):
             s_corrects += (s_pred == msgs).float().sum().item()
             s_total += msgs.numel()
 
-            for m, pred in zip(msgs.view(-1), s_pred.view(-1)):
-                s_conf_mat[m, pred] += 1
-
-            for m, pred in zip(msgs.view(-1), game.objs_to_msg(l_pred).view(-1)):
-                l_conf_mat[m, pred] += 1
+            s_conf_mat[msgs.view(-1), s_pred.view(-1)] += 1
+            l_conf_mat[msgs.view(-1), game.objs_to_msg(l_pred).view(-1)] += 1
 
     s_conf_mat /= torch.sum(s_conf_mat, -1, keepdim=True)
     l_conf_mat /= torch.sum(l_conf_mat, -1, keepdim=True)
