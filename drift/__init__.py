@@ -3,7 +3,7 @@ Some global settings
 """
 import torch
 
-USE_GPU = torch.cuda.is_available()
+USE_GPU = torch.cuda.device_count() > 0
 if USE_GPU:
     print('Use GPU')
 else:
