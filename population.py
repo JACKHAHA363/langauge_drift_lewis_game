@@ -22,7 +22,8 @@ def get_args():
     parser.add_argument('-prepare', action='store_true', help='prepare population')
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
     parser.add_argument('-logdir', required=True, help='path to tb log')
-    parser.add_argument('-n', default=3, help="population size")
+    parser.add_argument('-n', type=int, default=3, help="population size")
+    parser.add_argument('-acc', type=float, default=0.2, help='supervise training acc')
     return parser.parse_args()
 
 
@@ -33,8 +34,8 @@ def prepare_population(args):
         os.makedirs(args.ckpt_dir)
 
     for i in range(args.n):
-        speaker, _ = train_speaker_until(0.4)
-        listener, _ = train_listener_until(0.4)
+        speaker, _ = train_speaker_until(args.acc)
+        listener, _ = train_listener_until(args.acc)
         speaker.save(os.path.join(args.ckpt_dir, 's{}.pth'.format(i)))
         listener.save(os.path.join(args.ckpt_dir, 'l{}.pth'.format(i)))
 
