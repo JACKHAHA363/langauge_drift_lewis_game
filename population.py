@@ -6,6 +6,7 @@ import os
 import argparse
 import random
 import torch
+from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
 from drift.pretrain import train_listener_until, train_speaker_until
@@ -13,7 +14,7 @@ from drift.linear import Listener, Speaker
 from drift.gumbel import selfplay_batch
 
 STEPS = 1000000
-LOG_STEPS = 10
+LOG_STEPS = 100
 
 
 def get_args():
@@ -32,8 +33,8 @@ def prepare_population(args):
         os.makedirs(args.ckpt_dir)
 
     for i in range(args.n):
-        speaker, _ = train_speaker_until(0.2)
-        listener, _ = train_listener_until(0.2)
+        speaker, _ = train_speaker_until(0.4)
+        listener, _ = train_listener_until(0.4)
         speaker.save(os.path.join(args.ckpt_dir, 's{}.pth'.format(i)))
         listener.save(os.path.join(args.ckpt_dir, 'l{}.pth'.format(i)))
 
@@ -67,6 +68,8 @@ def population_selfplay(args):
     s_and_opts, l_and_opts = _load_population_and_opts(args, s_ckpts, l_ckpts)
     game = LewisGame(**s_and_opts[0][0].env_config)
     dset = Dataset(game, 1)
+    if os.path.exists(args.logdir):
+        rmtree(args.logdir)
     writer = SummaryWriter(args.logdir)
 
     # Training
