@@ -86,13 +86,12 @@ def population_selfplay(args):
         if step % LOG_STEPS == 0:
             stats, _, _ = eval_loop(dset.val_generator(1000), listener=listener,
                                     speaker=speaker, game=game)
-            # writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
-            # writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
             logstr = ["step {}:".format(step)]
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))
                 writer.add_scalar(name, val, step)
+            writer.flush()
             print(' '.join(logstr))
             if stats['comm_acc'] == 1.:
                 stats['step'] = step
