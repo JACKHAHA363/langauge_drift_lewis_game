@@ -19,7 +19,16 @@ class LewisGame:
         self.p = p
         self.t = t
         self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])
+
+        # The offset vector of converting to msg
+        self.msg_offset = torch.Tensor([i for i in range(self.p)]).long() * self.t
         self.all_msgs = self.objs_to_msg(self.all_objs)
+
+        # Move to GPU
+        if USE_GPU:
+            self.all_objs = self.all_objs.cuda()
+            self.all_msgs = self.all_msgs.cuda()
+            self.msg_offset = self.msg_offset.cuda()
 
     def get_random_objs(self, batch_size):
         indices = torch.randint(len(self.all_objs), size=[batch_size]).long()
@@ -34,8 +43,7 @@ class LewisGame:
         :param [bsz, nb_props]
         :return [bsz, nb_props]
         """
-        addition = torch.Tensor([i for i in range(self.p)]).long()
-        return objs + addition.unsqueeze(0) * self.t
+        return objs + self.msg_offset.unsqueeze(0)
 
 
 class Agent(torch.nn.Module):
