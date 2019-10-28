@@ -148,11 +148,8 @@ def eval_loop(val_generator, listener, speaker, game):
             s_corrects += (s_pred == msgs).float().sum().item()
             s_total += msgs.numel()
 
-            for m, pred in zip(msgs.view(-1), s_pred.view(-1)):
-                s_conf_mat[m, pred] += 1
-
-            for m, pred in zip(msgs.view(-1), game.objs_to_msg(l_pred).view(-1)):
-                l_conf_mat[m, pred] += 1
+            s_conf_mat[msgs.view(-1), s_pred.view(-1)] += 1
+            l_conf_mat[msgs.view(-1), game.objs_to_msg(l_pred).view(-1)] += 1
 
     s_conf_mat /= torch.sum(s_conf_mat, -1, keepdim=True)
     l_conf_mat /= torch.sum(l_conf_mat, -1, keepdim=True)
