@@ -1,9 +1,3 @@
-from drift.core import LewisGame, get_comm_acc, eval_loop, Dataset
-from drift.linear import Speaker, Listener
-import torch
-import os
-from shutil import rmtree
-from tensorboardX import SummaryWriter
 from torch.distributions import Categorical
 
 SPEAKER_CKPT = "./s_sl.pth"

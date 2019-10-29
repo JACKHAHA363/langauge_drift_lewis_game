@@ -1,8 +1,6 @@
-"""
-2-layer linear model like in ICLR paper
-"""
-from drift.core import BaseSpeaker, BaseListener
 import torch
+
+from drift.core import BaseSpeaker, BaseListener
 
 
 class Speaker(BaseSpeaker):
