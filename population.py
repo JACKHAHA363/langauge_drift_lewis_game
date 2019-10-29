@@ -12,8 +12,9 @@ from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
 from drift.pretrain import train_listener_until, train_speaker_until
 from drift.linear import Listener, Speaker
 from drift.gumbel import selfplay_batch
+from drift import USE_GPU
 
-STEPS = 1000000
+STEPS = 20000
 LOG_STEPS = 100
 
 
@@ -45,10 +46,14 @@ def _load_population_and_opts(args, s_ckpts, l_ckpts):
     l_and_opts = []
     for i in range(args.n):
         speaker = Speaker.load(os.path.join(args.ckpt_dir, s_ckpts[i]))
+        if USE_GPU:
+            speaker = speaker.cuda()
         s_opt = torch.optim.Adam(lr=5e-5, params=speaker.parameters())
         s_and_opts.append([speaker, s_opt])
 
         listener = Listener.load(os.path.join(args.ckpt_dir, l_ckpts[i]))
+        if USE_GPU:
+            listener = listener.cuda()
         l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
         l_and_opts.append([listener, l_opt])
     return s_and_opts, l_and_opts
@@ -93,9 +98,9 @@ def population_selfplay(args):
                 writer.add_scalar(name, val, step)
             writer.flush()
             print(' '.join(logstr))
-            if stats['comm_acc'] == 1.:
-                stats['step'] = step
-                break
+            #if stats['comm_acc'] == 1.:
+            #    stats['step'] = step
+            #    break
 
 
 if __name__ == '__main__':
