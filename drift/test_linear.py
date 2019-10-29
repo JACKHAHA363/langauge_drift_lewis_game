@@ -1,9 +1,9 @@
 from torch.distributions import Categorical
 from drift.core import LewisGame
-from drift.linear import Speaker, Listener
+from drift.linear import Speaker, Listener, DropoutListener, DropoutSpeaker
 
 
-def test_speaker():
+def test():
     env_config = LewisGame.get_default_config()
     game = LewisGame(**env_config)
     s = Speaker(env_config)
@@ -18,5 +18,21 @@ def test_speaker():
     print(obj_logits.shape)
 
 
+def test_dropout():
+    env_config = LewisGame.get_default_config()
+    game = LewisGame(**env_config)
+    s = DropoutSpeaker(env_config)
+    l = DropoutListener(env_config)
+    objs = game.get_random_objs(20)
+    msgs_logits = s.get_logits(objs)
+    print(msgs_logits.shape)
+
+    msgs = Categorical(logits=msgs_logits).sample()
+    obj_logits = l.get_logits(l.one_hot(msgs))
+    reconst = Categorical(logits=obj_logits).sample()
+    print(obj_logits.shape)
+
+
 if __name__ == '__main__':
-    test_speaker()
+    test()
+    test_dropout()

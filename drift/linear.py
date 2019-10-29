@@ -49,3 +49,23 @@ class Listener(BaseListener):
         oh_msgs.zero_()
         oh_msgs.scatter_(2, msgs.unsqueeze(-1), 1)
         return oh_msgs
+
+
+class DropoutListener(Listener):
+    def __init__(self, env_config):
+        super(DropoutListener, self).__init__(env_config)
+        self.dropout = torch.nn.Dropout()
+
+    def forward(self, oh_msgs):
+        return self.linear2(self.dropout(self.linear1(oh_msgs)))
+
+
+class DropoutSpeaker(Speaker):
+    def __init__(self, env_config):
+        super(DropoutSpeaker, self).__init__(env_config)
+        self.dropout = torch.nn.Dropout()
+
+    def forward(self, objs):
+        oh_objs = self._one_hot(objs)
+        logits = self.linear2(self.dropout(self.linear1(oh_objs)))
+        return logits.view(objs.shape[0], self.env_config['p'], -1)
