@@ -6,7 +6,9 @@ import os
 from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, get_comm_acc, eval_loop, Dataset
-from drift.pg import selfplay_batch, ExponentialMovingAverager
+# from drift.pg import selfplay_batch, ExponentialMovingAverager
+from drift.a2c import selfplay_batch, ExponentialMovingAverager
+from drift.linear import Speaker, Listener
 import argparse
 
 TRAIN_STEPS = 10000
@@ -56,6 +58,7 @@ def get_args():
     parser.add_argument('-speaker', required=True, help='path to speaker pth')
     parser.add_argument('-listener', required=True, help='path to listener pth')
     parser.add_argument('-log', required=True, help='Name of log')
+    # parser.add_argument('-a2c', action='store_false', default=False, dest='a2c', help='Use A2C')
     return parser.parse_args()
 
 
