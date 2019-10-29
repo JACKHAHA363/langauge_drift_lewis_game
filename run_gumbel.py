@@ -13,9 +13,14 @@ import argparse
 
 TRAIN_STEPS = 50000
 LOG_STEPS = 100
+MIN_TEMPERATURE = 1
 
 
-def selfplay(speaker, listener, gumbel_temperature=1, tb_writer=None):
+def decay_temperature(gumbel_temperature, decay_rate):
+    return max(gumbel_temperature * decay_rate, MIN_TEMPERATURE)
+
+
+def selfplay(speaker, listener, gumbel_temperature=1, tb_writer=None, decay_rate=1):
     """ Train speaker and listener with gumbel softmax. Return stats. """
     if USE_GPU:
         speaker = speaker.cuda()
@@ -30,6 +35,7 @@ def selfplay(speaker, listener, gumbel_temperature=1, tb_writer=None):
         if step % LOG_STEPS == 0:
             stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
                                                       speaker=speaker, game=game)
+            stats['temperature'] = gumbel_temperature
             tb_writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
             tb_writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
@@ -45,6 +51,9 @@ def selfplay(speaker, listener, gumbel_temperature=1, tb_writer=None):
         # Train for a batch
         selfplay_batch(game, gumbel_temperature, l_opt, listener, s_opt, speaker)
 
+        # Decay temperature
+        gumbel_temperature = decay_temperature(gumbel_temperature, decay_rate)
+
     stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
                                               speaker=speaker, game=game)
     stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
@@ -56,6 +65,8 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-speaker', required=True, help='path to speaker pth')
     parser.add_argument('-listener', required=True, help='path to listener pth')
+    parser.add_argument('-temperature', default=10, type=float, help='gumbel temperature')
+    parser.add_argument('-decay_rate', default=0.999, type=float, help='Gumbel decay')
     parser.add_argument('-log', required=True, help='Name of log')
     return parser.parse_args()
 
@@ -67,7 +78,8 @@ if __name__ == '__main__':
     if os.path.exists(args.log):
         rmtree(args.log)
     writer = SummaryWriter(args.log)
-    stats, speaker, listener = selfplay(speaker, listener, tb_writer=writer)
+    stats, speaker, listener = selfplay(speaker, listener, tb_writer=writer, gumbel_temperature=args.temperature,
+                                        decay_rate=args.decay_rate)
     logstr = []
     for name, val in stats.items():
         logstr.append("{}: {:.4f}".format(name, val))
