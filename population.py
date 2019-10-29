@@ -68,10 +68,14 @@ def population_selfplay(args):
         listener, l_opt = random.choice(l_and_opts)
 
         # Train for a Batch
+        speaker.train(True)
+        listener.train(True)
         selfplay_batch(game, 1, l_opt, listener, s_opt, speaker)
 
         # Eval and Logging
         if step % LOG_STEPS == 0:
+            speaker.train(False)
+            listener.train(False)
             stats, _, _ = eval_loop(dset.val_generator(1000), listener=listener,
                                     speaker=speaker, game=game)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
