@@ -3,7 +3,7 @@ This code will prepare the population with desired accuracy
 Usage: python prepare_population.py -ckpt_dir zzz_divese_pop -s_arch linear -l_arch linear -n 3 -acc 0.2
 """
 import os
-from drift.core import LewisGame
+from drift.core import LewisGame, Dataset
 from drift.pretrain import train_speaker_until, train_listener_until
 from drift.arch import get_listener_cls, get_speaker_cls
 import argparse
@@ -23,13 +23,15 @@ def prepare_population(args):
     s_cls = get_speaker_cls(args.s_arch)
     l_cls = get_listener_cls(args.l_arch)
     env_config = LewisGame.get_default_config()
+    game = LewisGame(**env_config)
+    dset = Dataset(train_size=100000, game=game)
 
     if not os.path.exists(args.ckpt_dir):
         os.makedirs(args.ckpt_dir)
 
     for i in range(args.n):
-        speaker, _ = train_speaker_until(args.acc, s_cls(env_config))
-        listener, _ = train_listener_until(args.acc, l_cls(env_config))
+        speaker, _ = train_speaker_until(args.acc, s_cls(env_config), dset)
+        listener, _ = train_listener_until(args.acc, l_cls(env_config), dset)
         speaker.save(os.path.join(args.ckpt_dir, 's{}.pth'.format(i)))
         listener.save(os.path.join(args.ckpt_dir, 'l{}.pth'.format(i)))
 

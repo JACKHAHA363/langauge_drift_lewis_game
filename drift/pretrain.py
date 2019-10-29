@@ -40,13 +40,10 @@ class EarlyStopper:
         return self.time == self.patience
 
 
-def train_speaker_until(acc, speaker):
+def train_speaker_until(acc, speaker, dset):
     """ Return a speaker trained until desired acc. If speaker is None construct a default one.
     """
-    env_config = speaker.env_config
-    game = LewisGame(**env_config)
-    dset = Dataset(game, 10000)
-    s_opt = torch.optim.Adam(lr=5e-4, params=speaker.parameters())
+    s_opt = torch.optim.Adam(lr=1e-4, params=speaker.parameters())
 
     should_stop = False
     step = 0
@@ -72,12 +69,9 @@ def train_speaker_until(acc, speaker):
     return speaker, stats
 
 
-def train_listener_until(acc, listener):
+def train_listener_until(acc, listener, dset):
     """ Train listener until desired acc """
-    env_config = listener.env_config
-    game = LewisGame(**env_config)
-    dset = Dataset(game, 10000)
-    l_opt = torch.optim.Adam(lr=1e-4, params=listener.parameters())
+    l_opt = torch.optim.Adam(lr=5e-4, params=listener.parameters())
 
     should_stop = False
     step = 0
