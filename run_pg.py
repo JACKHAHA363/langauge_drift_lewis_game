@@ -7,7 +7,6 @@ from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, get_comm_acc, eval_loop, Dataset
 from drift.pg import selfplay_batch, ExponentialMovingAverager
-from drift.linear import Speaker, Listener
 import argparse
 
 TRAIN_STEPS = 10000
@@ -62,8 +61,8 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    speaker = Speaker.load(args.speaker)
-    listener = Listener.load(args.listener)
+    speaker = torch.load(args.speaker)
+    listener = torch.load(args.listener)
     stats, speaker, listener = selfplay(args, speaker, listener)
     logstr = []
     for name, val in stats.items():

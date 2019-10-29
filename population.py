@@ -9,8 +9,6 @@ import torch
 from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
-from drift.pretrain import train_listener_until, train_speaker_until
-from drift.linear import Listener, Speaker
 from drift.gumbel import selfplay_batch
 from drift import USE_GPU
 
@@ -20,38 +18,23 @@ LOG_STEPS = 100
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-prepare', action='store_true', help='prepare population')
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
     parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-n', type=int, default=3, help="population size")
-    parser.add_argument('-acc', type=float, default=0.2, help='supervise training acc')
     return parser.parse_args()
-
-
-def prepare_population(args):
-    """ Prepare models and save in ckpt_dir """
-    # Prepare n pairs of speakers and listeners with 0.2
-    if not os.path.exists(args.ckpt_dir):
-        os.makedirs(args.ckpt_dir)
-
-    for i in range(args.n):
-        speaker, _ = train_speaker_until(args.acc)
-        listener, _ = train_listener_until(args.acc)
-        speaker.save(os.path.join(args.ckpt_dir, 's{}.pth'.format(i)))
-        listener.save(os.path.join(args.ckpt_dir, 'l{}.pth'.format(i)))
 
 
 def _load_population_and_opts(args, s_ckpts, l_ckpts):
     s_and_opts = []
     l_and_opts = []
     for i in range(args.n):
-        speaker = Speaker.load(os.path.join(args.ckpt_dir, s_ckpts[i]))
+        speaker = torch.load(os.path.join(args.ckpt_dir, s_ckpts[i]))
         if USE_GPU:
             speaker = speaker.cuda()
         s_opt = torch.optim.Adam(lr=5e-5, params=speaker.parameters())
         s_and_opts.append([speaker, s_opt])
 
-        listener = Listener.load(os.path.join(args.ckpt_dir, l_ckpts[i]))
+        listener = torch.load(os.path.join(args.ckpt_dir, l_ckpts[i]))
         if USE_GPU:
             listener = listener.cuda()
         l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
@@ -105,7 +88,4 @@ def population_selfplay(args):
 
 if __name__ == '__main__':
     args = get_args()
-    if args.prepare:
-        prepare_population(args)
-    else:
-        population_selfplay(args)
+    population_selfplay(args)

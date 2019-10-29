@@ -1,8 +1,6 @@
 import torch
 from torch.distributions import Categorical
-from drift.core import LewisGame, eval_loop, get_comm_acc, Dataset, eval_listener_loop, eval_speaker_loop
-from drift.linear import Listener, Speaker
-from drift import USE_GPU
+from drift.core import LewisGame, Dataset, eval_listener_loop, eval_speaker_loop
 import numpy as np
 
 VAL_BATCH_SIZE = 1000
@@ -42,17 +40,13 @@ class EarlyStopper:
         return self.time == self.patience
 
 
-def train_speaker_until(acc, speaker=None):
+def train_speaker_until(acc, speaker):
     """ Return a speaker trained until desired acc. If speaker is None construct a default one.
     """
-    if speaker is not None:
-        env_config = speaker.env_config
-    else:
-        env_config = LewisGame.get_default_config()
-        speaker = Speaker(env_config)
+    env_config = speaker.env_config
     game = LewisGame(**env_config)
     dset = Dataset(game, 10000)
-    s_opt = torch.optim.Adam(lr=1e-4, params=speaker.parameters())
+    s_opt = torch.optim.Adam(lr=5e-4, params=speaker.parameters())
 
     should_stop = False
     step = 0
@@ -78,13 +72,9 @@ def train_speaker_until(acc, speaker=None):
     return speaker, stats
 
 
-def train_listener_until(acc, listener=None):
+def train_listener_until(acc, listener):
     """ Train listener until desired acc """
-    if listener is not None:
-        env_config = listener.env_config
-    else:
-        env_config = LewisGame.get_default_config()
-        listener = Listener(env_config)
+    env_config = listener.env_config
     game = LewisGame(**env_config)
     dset = Dataset(game, 10000)
     l_opt = torch.optim.Adam(lr=1e-4, params=listener.parameters())
@@ -110,64 +100,3 @@ def train_listener_until(acc, listener=None):
                 break
 
     return listener, stats
-
-
-def train(train_batch_size, train_size):
-    """ Given training batch size and train dataset size. Train two models
-    :returns
-        speaker, listener,
-        stats: A dictionary of stats
-    """
-    env_config = LewisGame.get_default_config()
-    game = LewisGame(**env_config)
-    dset = Dataset(game, train_size)
-
-    speaker = Speaker(env_config)
-    s_opt = torch.optim.Adam(lr=1e-4, params=speaker.parameters())
-    listener = Listener(env_config)
-    l_opt = torch.optim.Adam(lr=1e-4, params=listener.parameters())
-    step = 0
-    estopper = EarlyStopper()
-    should_stop = False
-
-    if USE_GPU:
-        speaker = speaker.cuda()
-        listener = listener.cuda()
-
-    while True:
-        if should_stop:
-            print('Stop at {}'.format(step))
-            break
-
-        for objs, msgs in dset.train_generator(train_batch_size):
-            train_listener_batch(listener, l_opt, objs, msgs)
-            train_speaker_batch(speaker, s_opt, objs, msgs)
-            step += 1
-            if step % LOG_STEPS == 0:
-                stats, _, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
-                                        speaker=speaker, game=game)
-                stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
-                logstr = ["epoch {}:".format(step)]
-                for name, val in stats.items():
-                    logstr.append("{}: {:.4f}".format(name, val))
-                    # writer.add_scalar(name, val, epoch)
-                print(' '.join(logstr))
-                if estopper.should_stop(stats['comm_acc']):
-                    should_stop = True
-                    break
-
-    stats, _, _ = eval_loop(dset.val_generator(VAL_BATCH_SIZE), listener=listener,
-                            speaker=speaker, game=game)
-    stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
-    return speaker, listener, stats
-
-
-if __name__ == '__main__':
-    s, l, stats = train(5, 20)
-    logstr = []
-    for name, val in stats.items():
-        logstr.append("{}: {:.4f}".format(name, val))
-        # writer.add_scalar(name, val, epoch)
-    print(' '.join(logstr))
-    s.save('s_sl.pth')
-    l.save('l_sl.pth')

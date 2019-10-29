@@ -53,16 +53,7 @@ class Agent(torch.nn.Module):
         self.env_config = env_config
 
     def save(self, pth_path):
-        info = {'env_config': self.env_config,
-                'state_dict': self.state_dict()}
-        torch.save(info, pth_path)
-
-    @classmethod
-    def load(cls, pth_path):
-        info = torch.load(pth_path)
-        speaker = cls(env_config=info['env_config'])
-        speaker.load_state_dict(info['state_dict'])
-        return speaker
+        torch.save(self, pth_path)
 
 
 class BaseSpeaker(Agent):

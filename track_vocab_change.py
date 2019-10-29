@@ -5,7 +5,6 @@ vocab_data is a dictionary.
 vocab_data['sdata' | 'ldata'] is the accuracy matrix of shape [NB_STEPS, VOCAB_SIZE]
 """
 import torch
-from drift.linear import Speaker, Listener
 from drift.core import eval_loop, Dataset, LewisGame
 from drift.gumbel import selfplay_batch
 from tqdm import tqdm
@@ -13,8 +12,8 @@ import argparse
 
 
 def main(args):
-    speaker = Speaker.load(args.speaker)
-    listener = Listener.load(args.listener)
+    speaker = torch.load(args.speaker)
+    listener =torch.load(args.listener)
 
     game = LewisGame(**speaker.env_config)
     dset = Dataset(game, 1)
