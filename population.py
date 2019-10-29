@@ -12,8 +12,9 @@ from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
 from drift.pretrain import train_listener_until, train_speaker_until
 from drift.linear import Listener, Speaker
 from drift.gumbel import selfplay_batch
+from drift import USE_GPU
 
-STEPS = 1000000
+STEPS = 40000
 LOG_STEPS = 100
 
 
@@ -22,7 +23,8 @@ def get_args():
     parser.add_argument('-prepare', action='store_true', help='prepare population')
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
     parser.add_argument('-logdir', required=True, help='path to tb log')
-    parser.add_argument('-n', default=3, help="population size")
+    parser.add_argument('-n', type=int, default=3, help="population size")
+    parser.add_argument('-acc', type=float, default=0.2, help='supervise training acc')
     return parser.parse_args()
 
 
@@ -33,8 +35,8 @@ def prepare_population(args):
         os.makedirs(args.ckpt_dir)
 
     for i in range(args.n):
-        speaker, _ = train_speaker_until(0.4)
-        listener, _ = train_listener_until(0.4)
+        speaker, _ = train_speaker_until(args.acc)
+        listener, _ = train_listener_until(args.acc)
         speaker.save(os.path.join(args.ckpt_dir, 's{}.pth'.format(i)))
         listener.save(os.path.join(args.ckpt_dir, 'l{}.pth'.format(i)))
 
@@ -44,10 +46,14 @@ def _load_population_and_opts(args, s_ckpts, l_ckpts):
     l_and_opts = []
     for i in range(args.n):
         speaker = Speaker.load(os.path.join(args.ckpt_dir, s_ckpts[i]))
+        if USE_GPU:
+            speaker = speaker.cuda()
         s_opt = torch.optim.Adam(lr=5e-5, params=speaker.parameters())
         s_and_opts.append([speaker, s_opt])
 
         listener = Listener.load(os.path.join(args.ckpt_dir, l_ckpts[i]))
+        if USE_GPU:
+            listener = listener.cuda()
         l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
         l_and_opts.append([listener, l_opt])
     return s_and_opts, l_and_opts
@@ -85,17 +91,16 @@ def population_selfplay(args):
         if step % LOG_STEPS == 0:
             stats, _, _ = eval_loop(dset.val_generator(1000), listener=listener,
                                     speaker=speaker, game=game)
-            # writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
-            # writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
             stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
             logstr = ["step {}:".format(step)]
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))
                 writer.add_scalar(name, val, step)
+            writer.flush()
             print(' '.join(logstr))
-            if stats['comm_acc'] == 1.:
-                stats['step'] = step
-                break
+            #if stats['comm_acc'] == 1.:
+            #    stats['step'] = step
+            #    break
 
 
 if __name__ == '__main__':
