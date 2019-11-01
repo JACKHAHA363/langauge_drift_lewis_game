@@ -10,6 +10,7 @@ from drift.core import LewisGame, get_comm_acc, eval_loop, Dataset
 from drift.a2c import selfplay_batch, ExponentialMovingAverager
 from drift.linear import Speaker, Listener
 import argparse
+import numpy as np
 
 TRAIN_STEPS = 10000
 LOG_STEPS = 10
@@ -38,6 +39,11 @@ def selfplay(args, speaker, listener):
                 logstr.append("{}: {:.4f}".format(name, val))
                 writer.add_scalar(name, val, step)
             print(' '.join(logstr))
+            if ema_reward:
+                writer.add_histogram('Value Function', ema_reward.mean, step)
+                writer.add_histogram('Value Function 2', np.concatenate((ema_reward.mean,-ema_reward.mean)), step)
+
+                writer.add_histogram('value nums', ema_reward.num, step)
 
             if stats['comm_acc'] > 0.98:
                 stats['step'] = step

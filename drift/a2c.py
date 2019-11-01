@@ -28,7 +28,7 @@ LOG_NAME = 'log_pg'
 
 class ExponentialMovingAverager:
     def __init__(self, gamma=0.1):
-        self.mean = np.zeros(1000000)
+        self.mean = np.zeros(1000000) - 100
         self.num = np.zeros(1000000)
         self.gamma = gamma
 
