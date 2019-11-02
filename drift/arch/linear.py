@@ -6,8 +6,15 @@ from drift.core import BaseSpeaker, BaseListener
 class Speaker(BaseSpeaker):
     def __init__(self, env_config):
         super(Speaker, self).__init__(env_config)
-        self.linear1 = torch.nn.Linear(self.env_config['p'] * self.env_config['t'], 200)
-        self.linear2 = torch.nn.Linear(200, self.env_config['p'] * self.env_config['p'] * self.env_config['t'])
+        self.linear1 = torch.nn.Linear(self.env_config['p'] * self.env_config['t'], 200,
+                                       bias=False)
+        self.linear2 = torch.nn.Linear(200, self.env_config['p'] * self.env_config['p'] * self.env_config['t'],
+                                       bias=False)
+        self.init_weight()
+
+    def init_weight(self):
+        torch.nn.init.normal_(self.linear1.weight, std=0.1)
+        torch.nn.init.normal_(self.linear2.weight, std=0.1)
 
     def forward(self, objs):
         """ return [bsz, nb_prop, vocab_size] """
@@ -30,8 +37,14 @@ class Speaker(BaseSpeaker):
 class Listener(BaseListener):
     def __init__(self, env_config):
         super(Listener, self).__init__(env_config)
-        self.linear1 = torch.nn.Linear(self.env_config['p'] * self.env_config['t'], 200)
-        self.linear2 = torch.nn.Linear(200, self.env_config['t'])
+        self.linear1 = torch.nn.Linear(self.env_config['p'] * self.env_config['t'], 200,
+                                       bias=False)
+        self.linear2 = torch.nn.Linear(200, self.env_config['t'], bias=False)
+        self.init_weight()
+
+    def init_weight(self):
+        torch.nn.init.normal_(self.linear1.weight, std=0.1)
+        torch.nn.init.normal_(self.linear2.weight, std=0.1)
 
     def forward(self, oh_msgs):
         """ return [bsz, nb_prop, type_size] """
