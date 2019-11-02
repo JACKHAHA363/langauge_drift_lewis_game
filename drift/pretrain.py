@@ -5,6 +5,7 @@ import numpy as np
 
 VAL_BATCH_SIZE = 1000
 LOG_STEPS = 10
+MAX_STEPS = 2000
 
 
 def train_listener_batch(listener, l_opt, objs, msgs):
@@ -49,6 +50,7 @@ def train_speaker_until(acc, speaker, dset):
     step = 0
     stats = None
     while True:
+        should_stop = (step >= MAX_STEPS) or should_stop
         if should_stop:
             break
 
@@ -62,7 +64,7 @@ def train_speaker_until(acc, speaker, dset):
                 for name, val in stats.items():
                     logstr.append("{}: {:.4f}".format(name, val))
                     print(' '.join(logstr))
-                if stats['s_acc'] > acc:
+                if stats['s_acc'] >= acc:
                     should_stop = True
                     break
 
@@ -77,6 +79,7 @@ def train_listener_until(acc, listener, dset):
     step = 0
     stats = None
     while True:
+        should_stop = (step >= MAX_STEPS) or should_stop
         if should_stop:
             break
 
@@ -89,7 +92,7 @@ def train_listener_until(acc, listener, dset):
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))
             print(' '.join(logstr))
-            if stats['l_acc'] > acc:
+            if stats['l_acc'] >= acc:
                 should_stop = True
                 break
 

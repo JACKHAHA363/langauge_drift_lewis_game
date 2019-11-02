@@ -12,15 +12,20 @@ from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
 from drift.gumbel import selfplay_batch
 from drift import USE_GPU
 
-STEPS = 40000
-LOG_STEPS = 100
+STEPS = 400000
+LOG_STEPS = 20
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
     parser.add_argument('-logdir', required=True, help='path to tb log')
+    parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
+    parser.add_argument('-decay_rate', type=float, default=1., help='temperature decay rate. Default no decay')
+    parser.add_argument('-min_temperature', type=float, default=1, help='Minimum temperature')
     parser.add_argument('-n', type=int, default=3, help="population size")
+    parser.add_argument('-save_vocab_change', default=None, help='Paht to save the vocab change results. '
+                                                                 'If None not save')
     return parser.parse_args()
 
 
@@ -62,34 +67,51 @@ def population_selfplay(args):
     writer = SummaryWriter(args.logdir)
 
     # Training
-    for step in range(STEPS):
-        # Randomly pick one pair
-        speaker, s_opt = random.choice(s_and_opts)
-        listener, l_opt = random.choice(l_and_opts)
+    temperature = args.temperature
+    vocab_change_data = {'speak': [], 'listen': []}
+    try:
+        for step in range(STEPS):
+            # Randomly pick one pair
+            speaker, s_opt = random.choice(s_and_opts)
+            listener, l_opt = random.choice(l_and_opts)
 
-        # Train for a Batch
-        speaker.train(True)
-        listener.train(True)
-        selfplay_batch(game, 1, l_opt, listener, s_opt, speaker)
+            # Train for a Batch
+            speaker.train(True)
+            listener.train(True)
+            selfplay_batch(game, temperature, l_opt, listener, s_opt, speaker)
+            temperature = max(args.min_temperature, temperature * args.decay_rate)
 
-        # Eval and Logging
-        if step % LOG_STEPS == 0:
-            speaker.train(False)
-            listener.train(False)
-            stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
-                                                      speaker=speaker, game=game)
-            writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
-            writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
-            stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
-            logstr = ["step {}:".format(step)]
-            for name, val in stats.items():
-                logstr.append("{}: {:.4f}".format(name, val))
-                writer.add_scalar(name, val, step)
-            writer.flush()
-            print(' '.join(logstr))
-            #if stats['comm_acc'] == 1.:
-            #    stats['step'] = step
-            #    break
+            # Eval and Logging
+            if step % LOG_STEPS == 0:
+                speaker.train(False)
+                listener.train(False)
+                stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
+                                                          speaker=speaker, game=game)
+                writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
+                writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
+
+                if args.save_vocab_change is not None:
+                    vocab_change_data['speak'].append(s_conf_mat)
+                    vocab_change_data['listen'].append(l_conf_mat)
+                stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
+                stats['temp'] = temperature
+                logstr = ["step {}:".format(step)]
+                for name, val in stats.items():
+                    logstr.append("{}: {:.4f}".format(name, val))
+                    writer.add_scalar(name, val, step)
+                writer.flush()
+                print(' '.join(logstr))
+                #if stats['comm_acc'] == 1.:
+                #    stats['step'] = step
+                #    break
+
+    except KeyboardInterrupt:
+        pass
+
+    if args.save_vocab_change is not None:
+        for key, val in vocab_change_data.items():
+            vocab_change_data[key] = torch.stack(val)
+        torch.save(vocab_change_data, 'zzz_vocab_data.pth')
 
 
 if __name__ == '__main__':

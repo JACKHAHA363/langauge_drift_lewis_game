@@ -2,6 +2,7 @@
 Lewis Signal Game
 """
 import torch
+from torch.nn.functional import softmax
 from itertools import product
 from drift import USE_GPU, EVALUATION_RATIO
 from drift.utils import timeit
@@ -115,6 +116,21 @@ def eval_listener_loop(val_generator, listener):
     return {'l_acc': l_corrects / l_total}
 
 
+def _obj_prob_to_msg_prob(obj_probs):
+    """
+    :param obj_probs: [nb_obj, nb_type, nb_value]
+    :return: [nb_obj, nb_type * nb_value]
+    """
+    nb_obj, nb_type, nb_value = obj_probs.shape[0], obj_probs.shape[1], obj_probs.shape[2]
+    result = torch.zeros([nb_obj, nb_type, nb_type * nb_value])
+    result = result.to(device=obj_probs.device)
+    for i in range(nb_type):
+        start = i * nb_value
+        end = (i+1) * nb_value
+        result[:, i, start:end] = obj_probs[:, i]
+    return result
+
+
 @timeit('eval_loop')
 def eval_loop(val_generator, listener, speaker, game):
     """ Return accuracy as well as confusion matrix for symbols """
@@ -131,19 +147,21 @@ def eval_loop(val_generator, listener, speaker, game):
         with torch.no_grad():
             l_logits = listener(listener.one_hot(msgs))
             l_pred = torch.argmax(l_logits, dim=-1)
+            l_probs = softmax(l_logits, dim=-1)
             l_corrects += (l_pred == objs).float().sum().item()
             l_total += objs.numel()
 
             s_logits = speaker(objs)
             s_pred = torch.argmax(s_logits, dim=-1)
+            s_probs = softmax(s_logits, dim=-1)
             s_corrects += (s_pred == msgs).float().sum().item()
             s_total += msgs.numel()
 
-            s_conf_mat[msgs.view(-1), s_pred.view(-1)] += 1
-            l_conf_mat[msgs.view(-1), game.objs_to_msg(l_pred).view(-1)] += 1
+            s_conf_mat[msgs.view(-1)] += s_probs.view([-1, vocab_size])
+            l_conf_mat[msgs.view(-1)] += _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size])
 
-    s_conf_mat /= torch.sum(s_conf_mat, -1, keepdim=True)
-    l_conf_mat /= torch.sum(l_conf_mat, -1, keepdim=True)
+    s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
+    l_conf_mat /= (1e-32 + torch.sum(l_conf_mat, -1, keepdim=True))
     return {'l_acc': l_corrects / l_total, 's_acc': s_corrects / s_total}, s_conf_mat, l_conf_mat
 
 
@@ -154,16 +172,21 @@ class Dataset:
         assert isinstance(game, LewisGame)
         self.train_objs = game.get_random_objs(train_size)
         self.train_msgs = game.objs_to_msg(self.train_objs)
-        self.train_size = train_size
         self.game = game
 
         # Shuffle all objects index
         self.all_indices = [i for i in range(len(game.all_objs))]
         np.random.shuffle(self.all_indices)
+        self.train_inds = self.all_indices[:train_size].copy()
+
+        # Reshuffle all indice to get valid objects
+        np.random.shuffle(self.all_indices)
         self.valid_start = 0
 
     def train_generator(self, batch_size):
-        return self._get_generator(self.train_objs, self.train_msgs, batch_size)
+        return self._get_generator(self.game.all_objs[self.train_inds],
+                                   self.game.all_msgs[self.train_inds],
+                                   batch_size)
 
     def val_generator(self, batch_size):
         """ Used for evaluation. For each validation loop, randomly pick EVALUATION_RATIO * total_objects
@@ -172,9 +195,10 @@ class Dataset:
         valid_ids = self.all_indices[self.valid_start: self.valid_start + split]
         self.valid_start += split
 
-        # Reset valid_start if exceeding limit
+        # Reset valid_start if exceeding limit and reshuffle ids
         if self.valid_start >= len(self.all_indices):
             self.valid_start = 0
+            np.random.shuffle(self.all_indices)
 
         # Take the validation data
         objs = self.game.all_objs[valid_ids]
