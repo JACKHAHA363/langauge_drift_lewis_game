@@ -15,7 +15,8 @@ def get_args():
     parser.add_argument('-s_arch', required=True, help='speaker arch')
     parser.add_argument('-l_arch', required=True, help='listener arch')
     parser.add_argument('-n', type=int, default=3, help="population size")
-    parser.add_argument('-acc', type=float, default=0.2, help='supervise training acc')
+    parser.add_argument('-sacc', type=float, default=0.2, help='speak supervise training acc')
+    parser.add_argument('-lacc', type=float, default=0.2, help='listen supervise training acc')
     parser.add_argument('-dset_size', type=int, default=10000, help='size of training dataset')
     parser.add_argument('-switch_dset', action='store_true', help='If true each model use different dataset')
     return parser.parse_args()
@@ -34,10 +35,10 @@ def prepare_population(args):
     for i in range(args.n):
         if args.switch_dset:
             dset = Dataset(train_size=args.dset_size, game=game)
-        speaker, _ = train_speaker_until(args.acc, s_cls(env_config), dset)
+        speaker, _ = train_speaker_until(args.sacc, s_cls(env_config), dset)
         if args.switch_dset:
             dset = Dataset(train_size=args.dset_size, game=game)
-        listener, _ = train_listener_until(args.acc, l_cls(env_config), dset)
+        listener, _ = train_listener_until(args.lacc, l_cls(env_config), dset)
         speaker.save(os.path.join(args.ckpt_dir, 's{}.pth'.format(i)))
         listener.save(os.path.join(args.ckpt_dir, 'l{}.pth'.format(i)))
 

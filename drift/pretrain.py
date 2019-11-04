@@ -49,25 +49,27 @@ def train_speaker_until(acc, speaker, dset):
     should_stop = False
     step = 0
     stats = None
-    while True:
-        should_stop = (step >= MAX_STEPS) or should_stop
-        if should_stop:
-            break
+    try:
+        while True:
+            should_stop = (step >= MAX_STEPS) or should_stop
+            if should_stop:
+                break
 
-        for objs, msgs in dset.train_generator(5):
-            train_speaker_batch(speaker, s_opt, objs, msgs)
-            step += 1
-            if step % LOG_STEPS == 0:
-                stats = eval_speaker_loop(dset.val_generator(VAL_BATCH_SIZE),
-                                          speaker=speaker)
-                logstr = ["step {}:".format(step)]
-                for name, val in stats.items():
-                    logstr.append("{}: {:.4f}".format(name, val))
-                    print(' '.join(logstr))
-                if stats['s_acc'] >= acc:
-                    should_stop = True
-                    break
-
+            for objs, msgs in dset.train_generator(5):
+                train_speaker_batch(speaker, s_opt, objs, msgs)
+                step += 1
+                if step % LOG_STEPS == 0:
+                    stats = eval_speaker_loop(dset.val_generator(VAL_BATCH_SIZE),
+                                              speaker=speaker)
+                    logstr = ["step {}:".format(step)]
+                    for name, val in stats.items():
+                        logstr.append("{}: {:.4f}".format(name, val))
+                        print(' '.join(logstr))
+                    if stats['s_acc'] >= acc:
+                        should_stop = True
+                        break
+    except KeyboardInterrupt:
+        pass
     return speaker, stats
 
 
@@ -78,22 +80,25 @@ def train_listener_until(acc, listener, dset):
     should_stop = False
     step = 0
     stats = None
-    while True:
-        should_stop = (step >= MAX_STEPS) or should_stop
-        if should_stop:
-            break
-
-        for objs, msgs in dset.train_generator(5):
-            train_listener_batch(listener, l_opt, objs, msgs)
-            step += 1
-            stats = eval_listener_loop(dset.val_generator(VAL_BATCH_SIZE),
-                                       listener=listener)
-            logstr = ["step {}:".format(step)]
-            for name, val in stats.items():
-                logstr.append("{}: {:.4f}".format(name, val))
-            print(' '.join(logstr))
-            if stats['l_acc'] >= acc:
-                should_stop = True
+    try:
+        while True:
+            should_stop = (step >= MAX_STEPS) or should_stop
+            if should_stop:
                 break
+
+            for objs, msgs in dset.train_generator(5):
+                train_listener_batch(listener, l_opt, objs, msgs)
+                step += 1
+                stats = eval_listener_loop(dset.val_generator(VAL_BATCH_SIZE),
+                                           listener=listener)
+                logstr = ["step {}:".format(step)]
+                for name, val in stats.items():
+                    logstr.append("{}: {:.4f}".format(name, val))
+                print(' '.join(logstr))
+                if stats['l_acc'] >= acc:
+                    should_stop = True
+                    break
+    except KeyboardInterrupt:
+        pass
 
     return listener, stats
