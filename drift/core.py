@@ -178,14 +178,21 @@ class Dataset:
         self.all_indices = [i for i in range(len(game.all_objs))]
         np.random.shuffle(self.all_indices)
         self.train_inds = self.all_indices[:train_size].copy()
+        self.actual_train_inds = self.train_inds
 
         # Reshuffle all indice to get valid objects
         np.random.shuffle(self.all_indices)
         self.valid_start = 0
 
+    def use_partial_dataset(self):
+        """ Adjust actual train inds to partial """
+        np.random.shuffle(self.train_inds)
+        self.actual_train_inds = self.train_inds[:int(len(self.train_inds) / 4)]
+        print('Train on {} examples'.format(len(self.actual_train_inds)))
+
     def train_generator(self, batch_size):
-        return self._get_generator(self.game.all_objs[self.train_inds],
-                                   self.game.all_msgs[self.train_inds],
+        return self._get_generator(self.game.all_objs[self.actual_train_inds],
+                                   self.game.all_msgs[self.actual_train_inds],
                                    batch_size)
 
     def val_generator(self, batch_size):
