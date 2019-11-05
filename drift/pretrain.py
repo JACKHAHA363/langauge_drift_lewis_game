@@ -8,13 +8,14 @@ LOG_STEPS = 10
 MAX_STEPS = 2000
 
 
-def listener_imitate(student_listener, l_opt, teacher_listener):
+def listener_imitate(student_listener, l_opt, teacher_listener, max_steps):
     game = LewisGame(**student_listener.env_config)
     dset = Dataset(game=game, train_size=1)
     step = 0
+    accs = []
     try:
         while True:
-            if step >= MAX_STEPS:
+            if step >= max_steps:
                 break
 
             # Generate batch with teacher listener
@@ -22,80 +23,85 @@ def listener_imitate(student_listener, l_opt, teacher_listener):
             oh_msgs = student_listener.one_hot(msgs)
             with torch.no_grad():
                 teacher_logits = teacher_listener(oh_msgs)
-                objs = torch.argmax(teacher_logits, -1).detach()
+                objs = torch.distributions.Categorical(logits=teacher_logits).sample()
 
             # Train this batch
             train_listener_batch(student_listener, l_opt, objs, msgs)
             step += 1
 
             # Evaluate
-            l_corrects = 0
-            l_total = 0
-            for _, msgs in dset.val_generator(1000):
-                with torch.no_grad():
-                    oh_msgs = student_listener.one_hot(msgs)
-                    teacher_logits = teacher_listener(oh_msgs)
-                    objs = torch.argmax(teacher_logits, -1).detach()
-                    l_logits = student_listener(oh_msgs)
-                    l_pred = torch.argmax(l_logits, dim=-1)
-                    l_corrects += (l_pred == objs).float().sum().item()
-                    l_total += objs.numel()
-            stats = {'l_acc': l_corrects / l_total}
+            if step % LOG_STEPS == 0:
+                l_corrects = 0
+                l_total = 0
+                for _, msgs in dset.val_generator(1000):
+                    with torch.no_grad():
+                        oh_msgs = student_listener.one_hot(msgs)
+                        teacher_logits = teacher_listener(oh_msgs)
+                        objs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                        l_logits = student_listener(oh_msgs)
+                        l_pred = torch.argmax(l_logits, dim=-1)
+                        l_corrects += (l_pred == objs).float().sum().item()
+                        l_total += objs.numel()
+                stats = {'l_acc': l_corrects / l_total}
+                accs.append(stats['l_acc'])
 
-            # Report
-            logstr = ["step {}:".format(step)]
-            for name, val in stats.items():
-                logstr.append("{}: {:.4f}".format(name, val))
-            print(' '.join(logstr))
-            if stats['l_acc'] >= 0.95:
-                break
+                # Report
+                logstr = ["step {}:".format(step)]
+                for name, val in stats.items():
+                    logstr.append("{}: {:.4f}".format(name, val))
+                print(' '.join(logstr))
+                if stats['l_acc'] >= 0.95:
+                    break
     except KeyboardInterrupt:
         pass
-    return step
+    return accs
 
 
-def speaker_imitate(student_speaker, s_opt, teacher_speaker):
+def speaker_imitate(student_speaker, s_opt, teacher_speaker, max_steps):
     game = LewisGame(**student_speaker.env_config)
     dset = Dataset(game=game, train_size=1)
     step = 0
+    accs = []
     try:
         while True:
-            if step >= MAX_STEPS:
+            if step >= max_steps:
                 break
 
             # Generate batch with teacher listener
             objs = game.get_random_objs(50)
             with torch.no_grad():
                 teacher_logits = teacher_speaker(objs)
-                msgs = torch.argmax(teacher_logits, -1).detach()
+                msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
 
             # Train this batch
             train_speaker_batch(student_speaker, s_opt, objs, msgs)
             step += 1
 
             # Evaluation
-            s_corrects = 0
-            s_total = 0
-            for objs, _ in dset.val_generator(1000):
-                with torch.no_grad():
-                    teacher_logits = teacher_speaker(objs)
-                    msgs = torch.argmax(teacher_logits, -1).detach()
-                    s_logits = student_speaker(objs)
-                    s_pred = torch.argmax(s_logits, dim=-1)
-                    s_corrects += (s_pred == msgs).float().sum().item()
-                    s_total += msgs.numel()
-            stats = {'s_acc': s_corrects / s_total}
+            if step % LOG_STEPS == 0:
+                s_corrects = 0
+                s_total = 0
+                for objs, _ in dset.val_generator(1000):
+                    with torch.no_grad():
+                        teacher_logits = teacher_speaker(objs)
+                        msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                        s_logits = student_speaker(objs)
+                        s_pred = torch.argmax(s_logits, dim=-1)
+                        s_corrects += (s_pred == msgs).float().sum().item()
+                        s_total += msgs.numel()
+                stats = {'s_acc': s_corrects / s_total}
 
-            # Report
-            logstr = ["step {}:".format(step)]
-            for name, val in stats.items():
-                logstr.append("{}: {:.4f}".format(name, val))
-            print(' '.join(logstr))
-            if stats['l_acc'] >= 0.95:
-                break
+                # Report
+                logstr = ["step {}:".format(step)]
+                for name, val in stats.items():
+                    logstr.append("{}: {:.4f}".format(name, val))
+                print(' '.join(logstr))
+                accs.append(stats['s_acc'])
+                if stats['s_acc'] >= 0.95:
+                    break
     except KeyboardInterrupt:
         pass
-    return step
+    return accs
 
 
 def train_listener_batch(listener, l_opt, objs, msgs):

@@ -24,8 +24,9 @@ def get_args():
     parser.add_argument('-decay_rate', type=float, default=1., help='temperature decay rate. Default no decay')
     parser.add_argument('-min_temperature', type=float, default=1, help='Minimum temperature')
     parser.add_argument('-n', type=int, default=3, help="population size")
-    parser.add_argument('-save_vocab_change', default=None, help='Paht to save the vocab change results. '
+    parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
+    parser.add_argument('-save_population', default=None, help='Path to save the population. If None not save')
     return parser.parse_args()
 
 
@@ -112,6 +113,11 @@ def population_selfplay(args):
         for key, val in vocab_change_data.items():
             vocab_change_data[key] = torch.stack(val)
         torch.save(vocab_change_data, 'zzz_vocab_data.pth')
+
+    if args.save_population is not None:
+        for idx, ((speaker, _), (listener, _)) in enumerate(zip(s_and_opts, l_and_opts)):
+            speaker.save(os.path.join(args.save_population, 's{}.pth'.format(idx)))
+            listener.save(os.path.join(args.save_population, 'l{}.pth'.format(idx)))
 
 
 if __name__ == '__main__':
