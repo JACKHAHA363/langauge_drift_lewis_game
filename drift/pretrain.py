@@ -8,7 +8,7 @@ LOG_STEPS = 10
 MAX_STEPS = 2000
 
 
-def listener_imitate(student_listener, l_opt, teacher_listener, max_steps):
+def listener_imitate(student_listener, l_opt, teacher_listener, max_steps, with_eval=False):
     game = LewisGame(**student_listener.env_config)
     dset = Dataset(game=game, train_size=1)
     step = 0
@@ -31,7 +31,7 @@ def listener_imitate(student_listener, l_opt, teacher_listener, max_steps):
             step += 1
 
             # Evaluate
-            if step % LOG_STEPS == 0:
+            if step % LOG_STEPS == 0 and with_eval:
                 l_corrects = 0
                 l_total = 0
                 for _, msgs in dset.val_generator(1000):
@@ -59,7 +59,7 @@ def listener_imitate(student_listener, l_opt, teacher_listener, max_steps):
     return accs
 
 
-def speaker_imitate(student_speaker, s_opt, teacher_speaker, max_steps):
+def speaker_imitate(student_speaker, s_opt, teacher_speaker, max_steps, with_eval=False):
     game = LewisGame(**student_speaker.env_config)
     dset = Dataset(game=game, train_size=1)
     step = 0
@@ -81,7 +81,7 @@ def speaker_imitate(student_speaker, s_opt, teacher_speaker, max_steps):
             step += 1
 
             # Evaluation
-            if step % LOG_STEPS == 0:
+            if with_eval and step % LOG_STEPS == 0:
                 s_corrects = 0
                 s_total = 0
                 for objs, _ in dset.val_generator(1000):

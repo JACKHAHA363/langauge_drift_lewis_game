@@ -58,6 +58,12 @@ class Agent(torch.nn.Module):
     def save(self, pth_path):
         torch.save(self, pth_path)
 
+    @classmethod
+    def from_state_dict(cls, env_config, state_dict):
+        agent = cls(env_config)
+        agent.load_state_dict(state_dict)
+        return agent
+
 
 class BaseSpeaker(Agent):
     """ Speaker model """
