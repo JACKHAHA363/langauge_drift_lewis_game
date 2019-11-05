@@ -8,6 +8,69 @@ LOG_STEPS = 10
 MAX_STEPS = 1000
 
 
+def listener_imitate(student_listener, l_opt, teacher_listener):
+    game = LewisGame(**student_listener.env_config)
+    dset = Dataset(game=game, train_size=1)
+    step = 0
+    try:
+        while True:
+            if step >= MAX_STEPS:
+                break
+
+            # Generate batch with teacher listener
+            msgs = game.objs_to_msg(game.get_random_objs(50))
+            oh_msgs = student_listener.one_hot(msgs)
+            with torch.no_grad():
+                teacher_logits = teacher_listener(oh_msgs)
+                objs = torch.argmax(teacher_logits, -1).detach()
+
+            # Train this batch
+            train_listener_batch(student_listener, l_opt, objs, msgs)
+            step += 1
+            stats = eval_listener_loop(dset.val_generator(VAL_BATCH_SIZE),
+                                       listener=student_listener)
+            logstr = ["step {}:".format(step)]
+            for name, val in stats.items():
+                logstr.append("{}: {:.4f}".format(name, val))
+            print(' '.join(logstr))
+            if stats['l_acc'] >= 0.95:
+                break
+    except KeyboardInterrupt:
+        pass
+    return step
+
+
+def speaker_imitate(student_speaker, s_opt, teacher_speaker):
+    game = LewisGame(**student_speaker.env_config)
+    dset = Dataset(game=game, train_size=1)
+    step = 0
+    try:
+        while True:
+            if step >= MAX_STEPS:
+                break
+
+            # Generate batch with teacher listener
+            objs = game.get_random_objs(50)
+            with torch.no_grad():
+                teacher_logits = teacher_speaker(objs)
+                msgs = torch.argmax(teacher_logits, -1).detach()
+
+            # Train this batch
+            train_speaker_batch(student_speaker, s_opt, objs, msgs)
+            step += 1
+            stats = eval_speaker_loop(dset.val_generator(VAL_BATCH_SIZE),
+                                      speaker=student_speaker)
+            logstr = ["step {}:".format(step)]
+            for name, val in stats.items():
+                logstr.append("{}: {:.4f}".format(name, val))
+            print(' '.join(logstr))
+            if stats['l_acc'] >= 0.95:
+                break
+    except KeyboardInterrupt:
+        pass
+    return step
+
+
 def train_listener_batch(listener, l_opt, objs, msgs):
     l_logits = listener(listener.one_hot(msgs))
     l_logprobs = Categorical(logits=l_logits).log_prob(objs)
