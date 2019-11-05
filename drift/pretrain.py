@@ -27,8 +27,22 @@ def listener_imitate(student_listener, l_opt, teacher_listener):
             # Train this batch
             train_listener_batch(student_listener, l_opt, objs, msgs)
             step += 1
-            stats = eval_listener_loop(dset.val_generator(VAL_BATCH_SIZE),
-                                       listener=student_listener)
+
+            # Evaluate
+            l_corrects = 0
+            l_total = 0
+            for _, msgs in dset.val_generator(1000):
+                with torch.no_grad():
+                    oh_msgs = student_listener.one_hot(msgs)
+                    teacher_logits = teacher_listener(oh_msgs)
+                    objs = torch.argmax(teacher_logits, -1).detach()
+                    l_logits = student_listener(oh_msgs)
+                    l_pred = torch.argmax(l_logits, dim=-1)
+                    l_corrects += (l_pred == objs).float().sum().item()
+                    l_total += objs.numel()
+            stats = {'l_acc': l_corrects / l_total}
+
+            # Report
             logstr = ["step {}:".format(step)]
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))
@@ -58,8 +72,21 @@ def speaker_imitate(student_speaker, s_opt, teacher_speaker):
             # Train this batch
             train_speaker_batch(student_speaker, s_opt, objs, msgs)
             step += 1
-            stats = eval_speaker_loop(dset.val_generator(VAL_BATCH_SIZE),
-                                      speaker=student_speaker)
+
+            # Evaluation
+            s_corrects = 0
+            s_total = 0
+            for objs, _ in dset.val_generator(1000):
+                with torch.no_grad():
+                    teacher_logits = teacher_speaker(objs)
+                    msgs = torch.argmax(teacher_logits, -1).detach()
+                    s_logits = student_speaker(objs)
+                    s_pred = torch.argmax(s_logits, dim=-1)
+                    s_corrects += (s_pred == msgs).float().sum().item()
+                    s_total += msgs.numel()
+            stats = {'s_acc': s_corrects / s_total}
+
+            # Report
             logstr = ["step {}:".format(step)]
             for name, val in stats.items():
                 logstr.append("{}: {:.4f}".format(name, val))
