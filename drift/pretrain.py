@@ -23,7 +23,8 @@ def listener_imitate(student_listener, l_opt, teacher_listener, max_steps):
             oh_msgs = student_listener.one_hot(msgs)
             with torch.no_grad():
                 teacher_logits = teacher_listener(oh_msgs)
-                objs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                #objs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                objs = torch.argmax(teacher_logits, -1)
 
             # Train this batch
             train_listener_batch(student_listener, l_opt, objs, msgs)
@@ -37,7 +38,8 @@ def listener_imitate(student_listener, l_opt, teacher_listener, max_steps):
                     with torch.no_grad():
                         oh_msgs = student_listener.one_hot(msgs)
                         teacher_logits = teacher_listener(oh_msgs)
-                        objs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                        #objs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                        objs = torch.argmax(teacher_logits, -1)
                         l_logits = student_listener(oh_msgs)
                         l_pred = torch.argmax(l_logits, dim=-1)
                         l_corrects += (l_pred == objs).float().sum().item()
@@ -71,7 +73,8 @@ def speaker_imitate(student_speaker, s_opt, teacher_speaker, max_steps):
             objs = game.get_random_objs(50)
             with torch.no_grad():
                 teacher_logits = teacher_speaker(objs)
-                msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                #msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                msgs = torch.argmax(teacher_logits, -1)
 
             # Train this batch
             train_speaker_batch(student_speaker, s_opt, objs, msgs)
@@ -84,7 +87,8 @@ def speaker_imitate(student_speaker, s_opt, teacher_speaker, max_steps):
                 for objs, _ in dset.val_generator(1000):
                     with torch.no_grad():
                         teacher_logits = teacher_speaker(objs)
-                        msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                        #msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                        msgs = torch.argmax(teacher_logits, -1)
                         s_logits = student_speaker(objs)
                         s_pred = torch.argmax(s_logits, dim=-1)
                         s_corrects += (s_pred == msgs).float().sum().item()
