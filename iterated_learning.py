@@ -1,15 +1,16 @@
 """
-Try using population
-    1. Training against many listener and many speakers
+Try using reset https://arxiv.org/pdf/1906.02403.pdf
 """
 import os
 import argparse
-import random
+from copy import deepcopy
 import torch
+import random
 from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
 from drift.gumbel import selfplay_batch
+from drift.pretrain import listener_imitate, speaker_imitate
 from drift import USE_GPU
 
 STEPS = 400000
@@ -19,49 +20,42 @@ LOG_STEPS = 20
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
+    parser.add_argument('-generation_steps', type=int, default=1000, help='Reset one of the agent to the checkpoint '
+                                                                          'of that steps before')
+    parser.add_argument('-transmission_steps', type=int, default=5, help='number of steps to transmit '
+                                                                           'and fit the model')
     parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
     parser.add_argument('-decay_rate', type=float, default=1., help='temperature decay rate. Default no decay')
     parser.add_argument('-min_temperature', type=float, default=1, help='Minimum temperature')
-    parser.add_argument('-n', type=int, default=3, help="population size")
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
-    parser.add_argument('-save_population', default=None, help='Path to save the population. If None not save')
     return parser.parse_args()
 
 
-def _load_population_and_opts(args, s_ckpts, l_ckpts):
-    s_and_opts = []
-    l_and_opts = []
-    for i in range(args.n):
-        speaker = torch.load(os.path.join(args.ckpt_dir, s_ckpts[i]))
-        if USE_GPU:
-            speaker = speaker.cuda()
-        s_opt = torch.optim.Adam(lr=5e-5, params=speaker.parameters())
-        s_and_opts.append([speaker, s_opt])
-
-        listener = torch.load(os.path.join(args.ckpt_dir, l_ckpts[i]))
-        if USE_GPU:
-            listener = listener.cuda()
-        l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
-        l_and_opts.append([listener, l_opt])
-    return s_and_opts, l_and_opts
-
-
-def population_selfplay(args):
-    """ Load checkpoints """
+def _load_pretrained_agents(args):
     # Make sure it's valid ckpt dirs
     all_ckpts = os.listdir(args.ckpt_dir)
-    s_ckpts = ['s{}.pth'.format(i) for i in range(args.n)]
-    for s_ckpt in s_ckpts:
-        assert s_ckpt in all_ckpts
-    l_ckpts = ['l{}.pth'.format(i) for i in range(args.n)]
-    for l_ckpt in l_ckpts:
-        assert l_ckpt in all_ckpts
+    assert 's0.pth' in all_ckpts
+    assert 'l0.pth' in all_ckpts
 
+    speaker = torch.load(os.path.join(args.ckpt_dir, 's0.pth'))
+    if USE_GPU:
+        speaker = speaker.cuda()
+    s_opt = torch.optim.Adam(lr=5e-5, params=speaker.parameters())
+
+    listener = torch.load(os.path.join(args.ckpt_dir, 'l0.pth'))
+    if USE_GPU:
+        listener = listener.cuda()
+    l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
+    return speaker, s_opt, listener, l_opt
+
+
+def iteration_selfplay(args):
+    """ Load checkpoints """
     # Load populations
-    s_and_opts, l_and_opts = _load_population_and_opts(args, s_ckpts, l_ckpts)
-    game = LewisGame(**s_and_opts[0][0].env_config)
+    speaker, s_opt, listener, l_opt = _load_pretrained_agents(args)
+    game = LewisGame(**speaker.env_config)
     dset = Dataset(game, 1)
     if os.path.exists(args.logdir):
         rmtree(args.logdir)
@@ -70,17 +64,35 @@ def population_selfplay(args):
     # Training
     temperature = args.temperature
     vocab_change_data = {'speak': [], 'listen': []}
+    s_ckpt = deepcopy(speaker.state_dict())
+    l_ckpt = deepcopy(listener.state_dict())
     try:
         for step in range(STEPS):
-            # Randomly pick one pair
-            speaker, s_opt = random.choice(s_and_opts)
-            listener, l_opt = random.choice(l_and_opts)
-
             # Train for a Batch
             speaker.train(True)
             listener.train(True)
             selfplay_batch(game, temperature, l_opt, listener, s_opt, speaker)
             temperature = max(args.min_temperature, temperature * args.decay_rate)
+
+            # Check if randomly reset one of speaker or listener to previous ckpt
+            if (step + 1) % args.generation_steps == 0:
+                # Restore to old version and start transmission
+                teacher_speaker = speaker.from_state_dict(speaker.env_config, speaker.state_dict())
+                teacher_speaker.train(False)
+                speaker.load_state_dict(s_ckpt)
+                teacher_listener = listener.from_state_dict(listener.env_config, listener.state_dict())
+                teacher_listener.train(False)
+                listener.load_state_dict(l_ckpt)
+
+                print('Start transmission')
+                speaker_imitate(student_speaker=speaker, s_opt=s_opt,
+                                teacher_speaker=teacher_speaker, max_steps=args.transmission_steps)
+                listener_imitate(student_listener=listener, l_opt=l_opt,
+                                 teacher_listener=teacher_listener, max_steps=args.transmission_steps)
+
+                # Save for future student
+                s_ckpt = deepcopy(speaker.state_dict())
+                l_ckpt = deepcopy(listener.state_dict())
 
             # Eval and Logging
             if step % LOG_STEPS == 0:
@@ -114,12 +126,7 @@ def population_selfplay(args):
             vocab_change_data[key] = torch.stack(val)
         torch.save(vocab_change_data, 'zzz_vocab_data.pth')
 
-    if args.save_population is not None:
-        for idx, ((speaker, _), (listener, _)) in enumerate(zip(s_and_opts, l_and_opts)):
-            speaker.save(os.path.join(args.save_population, 's{}.pth'.format(idx)))
-            listener.save(os.path.join(args.save_population, 'l{}.pth'.format(idx)))
-
 
 if __name__ == '__main__':
     args = get_args()
-    population_selfplay(args)
+    iteration_selfplay(args)

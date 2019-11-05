@@ -23,7 +23,9 @@ class LewisGame:
         self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])
 
         # The offset vector of converting to msg
-        self.msg_offset = torch.Tensor([i for i in range(self.p)]).long() * self.t
+        self.msg_offset = np.arange(0, self.p) * self.t
+        #np.random.shuffle(self.msg_offset)
+        self.msg_offset = torch.Tensor(self.msg_offset).long()
         self.all_msgs = self.objs_to_msg(self.all_objs)
 
         # Move to GPU
@@ -55,6 +57,12 @@ class Agent(torch.nn.Module):
 
     def save(self, pth_path):
         torch.save(self, pth_path)
+
+    @classmethod
+    def from_state_dict(cls, env_config, state_dict):
+        agent = cls(env_config)
+        agent.load_state_dict(state_dict)
+        return agent
 
 
 class BaseSpeaker(Agent):
@@ -178,14 +186,21 @@ class Dataset:
         self.all_indices = [i for i in range(len(game.all_objs))]
         np.random.shuffle(self.all_indices)
         self.train_inds = self.all_indices[:train_size].copy()
+        self.actual_train_inds = self.train_inds
 
         # Reshuffle all indice to get valid objects
         np.random.shuffle(self.all_indices)
         self.valid_start = 0
 
+    def use_partial_dataset(self):
+        """ Adjust actual train inds to partial """
+        np.random.shuffle(self.train_inds)
+        self.actual_train_inds = self.train_inds[:int(len(self.train_inds) / 4)]
+        print('Train on {} examples'.format(len(self.actual_train_inds)))
+
     def train_generator(self, batch_size):
-        return self._get_generator(self.game.all_objs[self.train_inds],
-                                   self.game.all_msgs[self.train_inds],
+        return self._get_generator(self.game.all_objs[self.actual_train_inds],
+                                   self.game.all_msgs[self.actual_train_inds],
                                    batch_size)
 
     def val_generator(self, batch_size):
