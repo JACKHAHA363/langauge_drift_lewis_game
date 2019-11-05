@@ -8,7 +8,8 @@ LOG_STEPS = 10
 MAX_STEPS = 2000
 
 
-def listener_imitate(student_listener, l_opt, teacher_listener, max_steps, with_eval=False):
+def listener_imitate(student_listener, teacher_listener, max_steps, with_eval=False):
+    l_opt = torch.optim.Adam(lr=5e-5, params=student_listener.parameters())
     game = LewisGame(**student_listener.env_config)
     dset = Dataset(game=game, train_size=1)
     step = 0
@@ -59,7 +60,8 @@ def listener_imitate(student_listener, l_opt, teacher_listener, max_steps, with_
     return accs
 
 
-def speaker_imitate(student_speaker, s_opt, teacher_speaker, max_steps, with_eval=False):
+def speaker_imitate(student_speaker, teacher_speaker, max_steps, with_eval=False):
+    s_opt = torch.optim.Adam(lr=5e-5, params=student_speaker.parameters())
     game = LewisGame(**student_speaker.env_config)
     dset = Dataset(game=game, train_size=1)
     step = 0

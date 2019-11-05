@@ -85,9 +85,9 @@ def iteration_selfplay(args):
                 listener.load_state_dict(l_ckpt)
 
                 print('Start transmission')
-                speaker_imitate(student_speaker=speaker, s_opt=s_opt,
+                speaker_imitate(student_speaker=speaker,
                                 teacher_speaker=teacher_speaker, max_steps=args.transmission_steps)
-                listener_imitate(student_listener=listener, l_opt=l_opt,
+                listener_imitate(student_listener=listener,
                                  teacher_listener=teacher_listener, max_steps=args.transmission_steps)
 
                 # Save for future student
