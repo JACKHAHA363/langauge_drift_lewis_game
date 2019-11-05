@@ -20,10 +20,12 @@ LOG_STEPS = 20
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
-    parser.add_argument('-generation_steps', type=int, default=1000, help='Reset one of the agent to the checkpoint '
+    parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
                                                                           'of that steps before')
-    parser.add_argument('-transmission_steps', type=int, default=5, help='number of steps to transmit '
-                                                                           'and fit the model')
+    parser.add_argument('-s_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
+                                                                              'for speaker')
+    parser.add_argument('-l_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
+                                                                              'for listener')
     parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
     parser.add_argument('-decay_rate', type=float, default=1., help='temperature decay rate. Default no decay')
@@ -86,9 +88,9 @@ def iteration_selfplay(args):
 
                 print('Start transmission')
                 speaker_imitate(student_speaker=speaker,
-                                teacher_speaker=teacher_speaker, max_steps=args.transmission_steps)
+                                teacher_speaker=teacher_speaker, max_steps=args.s_transmission_steps)
                 listener_imitate(student_listener=listener,
-                                 teacher_listener=teacher_listener, max_steps=args.transmission_steps)
+                                 teacher_listener=teacher_listener, max_steps=args.l_transmission_steps)
 
                 # Save for future student
                 s_ckpt = deepcopy(speaker.state_dict())
