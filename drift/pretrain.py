@@ -5,7 +5,7 @@ import numpy as np
 
 VAL_BATCH_SIZE = 1000
 LOG_STEPS = 10
-MAX_STEPS = 1000
+MAX_STEPS = 2000
 
 
 def listener_imitate(student_listener, l_opt, teacher_listener):
@@ -119,6 +119,9 @@ def train_speaker_until(acc, speaker, dset):
                 break
 
             for objs, msgs in dset.train_generator(5):
+                if step >= MAX_STEPS:
+                    should_stop = True
+                    break
                 train_speaker_batch(speaker, s_opt, objs, msgs)
                 step += 1
                 if step % LOG_STEPS == 0:
@@ -150,6 +153,9 @@ def train_listener_until(acc, listener, dset):
                 break
 
             for objs, msgs in dset.train_generator(5):
+                if step >= MAX_STEPS:
+                    should_stop = True
+                    break
                 train_listener_batch(listener, l_opt, objs, msgs)
                 step += 1
                 stats = eval_listener_loop(dset.val_generator(VAL_BATCH_SIZE),
