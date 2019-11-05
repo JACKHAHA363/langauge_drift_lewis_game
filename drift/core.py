@@ -23,7 +23,9 @@ class LewisGame:
         self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])
 
         # The offset vector of converting to msg
-        self.msg_offset = torch.Tensor([i for i in range(self.p)]).long() * self.t
+        self.msg_offset = np.arange(0, self.p) * self.t
+        #np.random.shuffle(self.msg_offset)
+        self.msg_offset = torch.Tensor(self.msg_offset).long()
         self.all_msgs = self.objs_to_msg(self.all_objs)
 
         # Move to GPU
