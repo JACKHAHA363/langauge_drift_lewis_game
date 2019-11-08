@@ -1,6 +1,6 @@
 import torch
 from torch.distributions import Categorical
-from drift.core import LewisGame, Dataset, eval_listener_loop, eval_speaker_loop
+from drift.core import eval_listener_loop, eval_speaker_loop
 import numpy as np
 
 VAL_BATCH_SIZE = 1000
@@ -8,106 +8,51 @@ LOG_STEPS = 10
 MAX_STEPS = 2000
 
 
-def listener_imitate(student_listener, teacher_listener, max_steps, with_eval=False):
-    l_opt = torch.optim.Adam(lr=5e-5, params=student_listener.parameters())
-    game = LewisGame(**student_listener.env_config)
-    dset = Dataset(game=game, train_size=1)
-    step = 0
-    accs = []
-    try:
-        while True:
-            if step >= max_steps:
-                break
+def imitate_listener_batch(student, teacher, opt, msgs, temperature=0):
+    """ Imitate teacher on this batch. If temperature > 0, it's imitate soft label.
+        Else imitate argmax
+    """
+    # Generate target obj
+    with torch.no_grad():
+        oh_msgs = teacher.one_hot(msgs)
+        teacher_logits = teacher(oh_msgs)
 
-            # Generate batch with teacher listener
-            msgs = game.objs_to_msg(game.get_random_objs(50))
-            oh_msgs = student_listener.one_hot(msgs)
-            with torch.no_grad():
-                teacher_logits = teacher_listener(oh_msgs)
-                #objs = torch.distributions.Categorical(logits=teacher_logits).sample()
-                objs = torch.argmax(teacher_logits, -1)
+    # Train with argmax
+    if temperature == 0:
+        objs = torch.argmax(teacher_logits, -1)
+        train_listener_batch(student, opt, objs, msgs)
 
-            # Train this batch
-            train_listener_batch(student_listener, l_opt, objs, msgs)
-            step += 1
-
-            # Evaluate
-            if step % LOG_STEPS == 0 and with_eval:
-                l_corrects = 0
-                l_total = 0
-                for _, msgs in dset.val_generator(1000):
-                    with torch.no_grad():
-                        oh_msgs = student_listener.one_hot(msgs)
-                        teacher_logits = teacher_listener(oh_msgs)
-                        #objs = torch.distributions.Categorical(logits=teacher_logits).sample()
-                        objs = torch.argmax(teacher_logits, -1)
-                        l_logits = student_listener(oh_msgs)
-                        l_pred = torch.argmax(l_logits, dim=-1)
-                        l_corrects += (l_pred == objs).float().sum().item()
-                        l_total += objs.numel()
-                stats = {'l_acc': l_corrects / l_total}
-                accs.append(stats['l_acc'])
-
-                # Report
-                logstr = ["step {}:".format(step)]
-                for name, val in stats.items():
-                    logstr.append("{}: {:.4f}".format(name, val))
-                print(' '.join(logstr))
-                if stats['l_acc'] >= 0.95:
-                    break
-    except KeyboardInterrupt:
-        pass
-    return accs
+    else:
+        soft_label = torch.nn.functional.softmax(teacher_logits / temperature, -1)
+        student_logits = student(oh_msgs)
+        student_logprobs = torch.nn.functional.log_softmax(student_logits, -1)
+        loss = -(soft_label * student_logprobs).sum(-1).sum(-1).mean()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
 
 
-def speaker_imitate(student_speaker, teacher_speaker, max_steps, with_eval=False):
-    s_opt = torch.optim.Adam(lr=5e-5, params=student_speaker.parameters())
-    game = LewisGame(**student_speaker.env_config)
-    dset = Dataset(game=game, train_size=1)
-    step = 0
-    accs = []
-    try:
-        while True:
-            if step >= max_steps:
-                break
+def imitate_speak_batch(student, teacher, opt, objs, temperature=0):
+    """ Imitate teacher on this batch. If temperature > 0, it's imitate soft label.
+        Else imitate argmax
+    """
+    # Generate target obj
+    with torch.no_grad():
+        teacher_logits = teacher(objs)
 
-            # Generate batch with teacher listener
-            objs = game.get_random_objs(50)
-            with torch.no_grad():
-                teacher_logits = teacher_speaker(objs)
-                #msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
-                msgs = torch.argmax(teacher_logits, -1)
+    # Train with argmax
+    if temperature == 0:
+        msgs = torch.argmax(teacher_logits, -1)
+        train_speaker_batch(student, opt, objs, msgs)
 
-            # Train this batch
-            train_speaker_batch(student_speaker, s_opt, objs, msgs)
-            step += 1
-
-            # Evaluation
-            if with_eval and step % LOG_STEPS == 0:
-                s_corrects = 0
-                s_total = 0
-                for objs, _ in dset.val_generator(1000):
-                    with torch.no_grad():
-                        teacher_logits = teacher_speaker(objs)
-                        #msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
-                        msgs = torch.argmax(teacher_logits, -1)
-                        s_logits = student_speaker(objs)
-                        s_pred = torch.argmax(s_logits, dim=-1)
-                        s_corrects += (s_pred == msgs).float().sum().item()
-                        s_total += msgs.numel()
-                stats = {'s_acc': s_corrects / s_total}
-
-                # Report
-                logstr = ["step {}:".format(step)]
-                for name, val in stats.items():
-                    logstr.append("{}: {:.4f}".format(name, val))
-                print(' '.join(logstr))
-                accs.append(stats['s_acc'])
-                if stats['s_acc'] >= 0.95:
-                    break
-    except KeyboardInterrupt:
-        pass
-    return accs
+    else:
+        soft_label = torch.nn.functional.softmax(teacher_logits / temperature, -1)
+        student_logits = student(objs)
+        student_logprobs = torch.nn.functional.log_softmax(student_logits, -1)
+        loss = -(soft_label * student_logprobs).sum(-1).sum(-1).mean()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
 
 
 def train_listener_batch(listener, l_opt, objs, msgs):

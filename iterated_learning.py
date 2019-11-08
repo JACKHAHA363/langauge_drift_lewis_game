@@ -10,16 +10,20 @@ from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
 from drift.gumbel import selfplay_batch
-from drift.pretrain import listener_imitate, speaker_imitate
+from drift.pretrain import imitate_listener_batch, imitate_speak_batch
 from drift import USE_GPU
 
 STEPS = 400000
-LOG_STEPS = 20
+LOG_STEPS = 100
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
+
+    # For transmission
+    parser.add_argument('-distill_temperature', type=float, default=0, help='If 0 fit with argmax, else use '
+                                                                            'soft label with that temperature')
     parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
                                                                           'of that steps before')
     parser.add_argument('-s_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
@@ -27,11 +31,13 @@ def get_args():
     parser.add_argument('-l_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
                                                                               'for listener')
     parser.add_argument('-logdir', required=True, help='path to tb log')
+    parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
+                                                                 'If None not save')
+
+    # For gumbel
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
     parser.add_argument('-decay_rate', type=float, default=1., help='temperature decay rate. Default no decay')
     parser.add_argument('-min_temperature', type=float, default=1, help='Minimum temperature')
-    parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
-                                                                 'If None not save')
     return parser.parse_args()
 
 
@@ -51,6 +57,92 @@ def _load_pretrained_agents(args):
         listener = listener.cuda()
     l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
     return speaker, s_opt, listener, l_opt
+
+
+def listener_imitate(game, student_listener, teacher_listener, max_steps, temperature=0, with_eval=False):
+    l_opt = torch.optim.Adam(lr=5e-5, params=student_listener.parameters())
+    dset = Dataset(game=game, train_size=1)
+    step = 0
+    accs = []
+    try:
+        while True:
+            if step >= max_steps:
+                break
+
+            # Train for a batch
+            msgs = game.objs_to_msg(game.get_random_objs(50))
+            imitate_listener_batch(student_listener, teacher_listener, l_opt, msgs, temperature)
+            step += 1
+
+            # Evaluate
+            if step % LOG_STEPS == 0 and with_eval:
+                l_corrects = 0
+                l_total = 0
+                for _, msgs in dset.val_generator(1000):
+                    with torch.no_grad():
+                        oh_msgs = student_listener.one_hot(msgs)
+                        teacher_logits = teacher_listener(oh_msgs)
+                        objs = torch.argmax(teacher_logits, -1)
+                        l_logits = student_listener(oh_msgs)
+                        l_pred = torch.argmax(l_logits, dim=-1)
+                        l_corrects += (l_pred == objs).float().sum().item()
+                        l_total += objs.numel()
+                stats = {'l_acc': l_corrects / l_total}
+                accs.append(stats['l_acc'])
+
+                # Report
+                logstr = ["step {}:".format(step)]
+                for name, val in stats.items():
+                    logstr.append("{}: {:.4f}".format(name, val))
+                print(' '.join(logstr))
+                if stats['l_acc'] >= 0.95:
+                    break
+    except KeyboardInterrupt:
+        pass
+    return accs
+
+
+def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperature=0., with_eval=False):
+    s_opt = torch.optim.Adam(lr=5e-5, params=student_speaker.parameters())
+    dset = Dataset(game=game, train_size=1)
+    step = 0
+    accs = []
+    try:
+        while True:
+            if step >= max_steps:
+                break
+
+            # Generate batch with teacher listener
+            objs = game.get_random_objs(50)
+            imitate_speak_batch(student_speaker, teacher_speaker, s_opt, objs, temperature)
+            step += 1
+
+            # Evaluation
+            if with_eval and step % LOG_STEPS == 0:
+                s_corrects = 0
+                s_total = 0
+                for objs, _ in dset.val_generator(1000):
+                    with torch.no_grad():
+                        teacher_logits = teacher_speaker(objs)
+                        #msgs = torch.distributions.Categorical(logits=teacher_logits).sample()
+                        msgs = torch.argmax(teacher_logits, -1)
+                        s_logits = student_speaker(objs)
+                        s_pred = torch.argmax(s_logits, dim=-1)
+                        s_corrects += (s_pred == msgs).float().sum().item()
+                        s_total += msgs.numel()
+                stats = {'s_acc': s_corrects / s_total}
+
+                # Report
+                logstr = ["step {}:".format(step)]
+                for name, val in stats.items():
+                    logstr.append("{}: {:.4f}".format(name, val))
+                print(' '.join(logstr))
+                accs.append(stats['s_acc'])
+                if stats['s_acc'] >= 0.95:
+                    break
+    except KeyboardInterrupt:
+        pass
+    return accs
 
 
 def iteration_selfplay(args):
@@ -87,10 +179,10 @@ def iteration_selfplay(args):
                 listener.load_state_dict(l_ckpt)
 
                 print('Start transmission')
-                speaker_imitate(student_speaker=speaker,
-                                teacher_speaker=teacher_speaker, max_steps=args.s_transmission_steps)
-                listener_imitate(student_listener=listener,
-                                 teacher_listener=teacher_listener, max_steps=args.l_transmission_steps)
+                speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
+                                max_steps=args.s_transmission_steps, temperature=args.distill_temperature)
+                listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
+                                 max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
 
                 # Save for future student
                 s_ckpt = deepcopy(speaker.state_dict())
