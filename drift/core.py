@@ -156,6 +156,9 @@ def eval_loop(val_generator, listener, speaker, game):
     l_total = 0
     s_corrects = 0
     s_total = 0
+    l_ent = 0
+    s_ent = 0
+    nb_batch = 0
 
     # Add speaker confusion matrix
     vocab_size = listener.env_config['p'] * listener.env_config['t']
@@ -178,9 +181,15 @@ def eval_loop(val_generator, listener, speaker, game):
             s_conf_mat[msgs.view(-1)] += s_probs.view([-1, vocab_size])
             l_conf_mat[msgs.view(-1)] += _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size])
 
+            # Entropy
+            l_ent += -(l_probs * torch.log(l_probs + 1e-32)).mean().item()
+            s_ent += -(s_probs * torch.log(s_probs + 1e-32)).mean().item()
+            nb_batch += 1
+
     s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
     l_conf_mat /= (1e-32 + torch.sum(l_conf_mat, -1, keepdim=True))
-    return {'l_acc': l_corrects / l_total, 's_acc': s_corrects / s_total}, s_conf_mat, l_conf_mat
+    return {'listen/acc': l_corrects / l_total, 'speak/acc': s_corrects / s_total,
+            'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch }, s_conf_mat, l_conf_mat
 
 
 class Dataset:
