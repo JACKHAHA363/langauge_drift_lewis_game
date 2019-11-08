@@ -13,7 +13,7 @@ from drift.gumbel import selfplay_batch
 from drift import USE_GPU
 
 STEPS = 400000
-LOG_STEPS = 20
+LOG_STEPS = 100
 
 
 def get_args():
