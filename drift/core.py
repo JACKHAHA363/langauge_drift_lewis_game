@@ -7,17 +7,27 @@ from itertools import product
 from drift import USE_GPU, EVALUATION_RATIO
 from drift.utils import timeit
 import numpy as np
+import argparse
 
 
 class LewisGame:
     fields = [('p', int, 6, 'nb properties'),
               ('t', int, 10, 'nb types')]
 
+    @staticmethod
+    def get_parser(parser=None):
+        if parser is None:
+            parser = argparse.ArgumentParser()
+        for name, dtype, val, desc in LewisGame.fields:
+            parser.add_argument('-' + name, default=val, type=dtype, help=desc)
+        return parser
+
     @classmethod
     def get_default_config(cls):
         return {name: default for name, _, default, _ in cls.fields}
 
     def __init__(self, p, t):
+        print('Building a game with p: {}, t: {}'.format(p, t))
         self.p = p
         self.t = t
         self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])

@@ -21,13 +21,14 @@ def get_args():
     parser.add_argument('-switch_dset', action='store_true', help='If true each model use different dataset')
     parser.add_argument('-partial_dset', action='store_true', help='Learn from the same dataset each time '
                                                                    'with partial data')
+    parser = LewisGame.get_parser(parser)
     return parser.parse_args()
 
 
 def prepare_population(args):
     s_cls = get_speaker_cls(args.s_arch)
     l_cls = get_listener_cls(args.l_arch)
-    env_config = LewisGame.get_default_config()
+    env_config = {'p': args.p, 't': args.t}
     game = LewisGame(**env_config)
     dset = Dataset(train_size=args.dset_size, game=game)
 
