@@ -22,6 +22,7 @@ def get_args():
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
 
     # For transmission
+    parser.add_argument('-init_weight', action='store_true', help='Use the ckpt weights')
     parser.add_argument('-distill_temperature', type=float, default=0, help='If 0 fit with argmax, else use '
                                                                             'soft label with that temperature')
     parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
@@ -184,9 +185,10 @@ def iteration_selfplay(args):
                 listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
                                  max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
 
-                # Save for future student
-                s_ckpt = deepcopy(speaker.state_dict())
-                l_ckpt = deepcopy(listener.state_dict())
+                # Save for future student if do not use initial weight
+                if not args.init_weight:
+                    s_ckpt = deepcopy(speaker.state_dict())
+                    l_ckpt = deepcopy(listener.state_dict())
 
             # Eval and Logging
             if step % LOG_STEPS == 0:
