@@ -59,9 +59,8 @@ def _load_pretrained_agents(args):
     return speaker, s_opt, listener, l_opt
 
 
-def listener_imitate(student_listener, teacher_listener, max_steps, temperature=0, with_eval=False):
+def listener_imitate(game, student_listener, teacher_listener, max_steps, temperature=0, with_eval=False):
     l_opt = torch.optim.Adam(lr=5e-5, params=student_listener.parameters())
-    game = LewisGame(**student_listener.env_config)
     dset = Dataset(game=game, train_size=1)
     step = 0
     accs = []
@@ -103,9 +102,8 @@ def listener_imitate(student_listener, teacher_listener, max_steps, temperature=
     return accs
 
 
-def speaker_imitate(student_speaker, teacher_speaker, max_steps, temperature=0., with_eval=False):
+def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperature=0., with_eval=False):
     s_opt = torch.optim.Adam(lr=5e-5, params=student_speaker.parameters())
-    game = LewisGame(**student_speaker.env_config)
     dset = Dataset(game=game, train_size=1)
     step = 0
     accs = []
@@ -181,9 +179,9 @@ def iteration_selfplay(args):
                 listener.load_state_dict(l_ckpt)
 
                 print('Start transmission')
-                speaker_imitate(student_speaker=speaker, teacher_speaker=teacher_speaker,
+                speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
                                 max_steps=args.s_transmission_steps, temperature=args.distill_temperature)
-                listener_imitate(student_listener=listener, teacher_listener=teacher_listener,
+                listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
                                  max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
 
                 # Save for future student
