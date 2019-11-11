@@ -164,6 +164,9 @@ def eval_loop(val_generator, listener, speaker, game):
     vocab_size = listener.env_config['p'] * listener.env_config['t']
     s_conf_mat = torch.zeros([vocab_size, vocab_size])
     l_conf_mat = torch.zeros([vocab_size, vocab_size])
+    if USE_GPU:
+        s_conf_mat = s_conf_mat.cuda()
+        l_conf_mat = l_conf_mat.cuda()
     for objs, msgs in val_generator:
         with torch.no_grad():
             l_logits = listener(listener.one_hot(msgs))
