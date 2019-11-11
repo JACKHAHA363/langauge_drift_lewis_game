@@ -16,7 +16,7 @@ LOGGER = logging.getLogger('random_hparam')
 LOGGER.setLevel(logging.INFO)
 LOGGER.handlers = [logging.StreamHandler(stream=sys.stdout)]
 
-TRAIN_FILE = join(dirname(drift.__file__), 'iterated_learning.py')
+TRAIN_FILE = join(dirname(dirname(drift.__file__)), 'iterated_learning.py')
 
 HP_RANGES = {
     'ckpt_dir': "",
