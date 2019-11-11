@@ -150,6 +150,13 @@ def iteration_selfplay(args):
     """ Load checkpoints """
     # Load populations
     speaker, s_opt, listener, l_opt = _load_pretrained_agents(args)
+    teacher_speaker = speaker.from_state_dict(speaker.env_config, speaker.state_dict())
+    teacher_listener = listener.from_state_dict(listener.env_config, listener.state_dict())
+    if USE_GPU:
+        teacher_speaker.cuda()
+        teacher_listener.cuda()
+    s_ckpt = deepcopy(speaker.state_dict())
+    l_ckpt = deepcopy(listener.state_dict())
     game = LewisGame(**speaker.env_config)
     dset = Dataset(game, 1)
     if os.path.exists(args.logdir):
@@ -159,8 +166,6 @@ def iteration_selfplay(args):
     # Training
     temperature = args.temperature
     vocab_change_data = {'speak': [], 'listen': []}
-    s_ckpt = deepcopy(speaker.state_dict())
-    l_ckpt = deepcopy(listener.state_dict())
     try:
         for step in range(args.steps):
             # Train for a Batch
@@ -172,10 +177,10 @@ def iteration_selfplay(args):
             # Check if randomly reset one of speaker or listener to previous ckpt
             if (step + 1) % args.generation_steps == 0:
                 # Restore to old version and start transmission
-                teacher_speaker = speaker.from_state_dict(speaker.env_config, speaker.state_dict())
+                teacher_speaker.load_state_dict(speaker.state_dict())
                 teacher_speaker.train(False)
                 speaker.load_state_dict(s_ckpt)
-                teacher_listener = listener.from_state_dict(listener.env_config, listener.state_dict())
+                teacher_listener.load_state_dict(listener.state_dict())
                 teacher_listener.train(False)
                 listener.load_state_dict(l_ckpt)
 
