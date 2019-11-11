@@ -13,7 +13,6 @@ from drift.gumbel import selfplay_batch
 from drift.pretrain import imitate_listener_batch, imitate_speak_batch
 from drift import USE_GPU
 
-STEPS = 400000
 LOG_STEPS = 100
 
 
@@ -34,6 +33,7 @@ def get_args():
     parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
+    parser.add_argument('-steps', default=10000, type=int, help='Total training steps')
 
     # For gumbel
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
@@ -162,7 +162,7 @@ def iteration_selfplay(args):
     s_ckpt = deepcopy(speaker.state_dict())
     l_ckpt = deepcopy(listener.state_dict())
     try:
-        for step in range(STEPS):
+        for step in range(args.steps):
             # Train for a Batch
             speaker.train(True)
             listener.train(True)
