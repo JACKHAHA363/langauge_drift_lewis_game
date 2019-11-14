@@ -197,7 +197,8 @@ def iteration_selfplay(args):
                                  max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
                 _, final_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
 
-                img = plot_distill_change(game.vocab_size, final_s_conf_mat, student_s_conf_mat, teacher_s_conf_mat)
+                img = plot_distill_change(game.vocab_size, final_s_conf_mat, student_s_conf_mat, teacher_s_conf_mat,
+                                          args.distill_temperature)
                 writer.add_image('distill_change', img, step)
 
                 # Save for future student if do not use initial weight
@@ -238,7 +239,10 @@ def iteration_selfplay(args):
         torch.save(vocab_change_data, args.save_vocab_change)
 
 
-def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teacher_s_conf_mat):
+def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teacher_s_conf_mat, distill_temperature):
+    """ Plot each teacher, student, and final """
+    # Distort teacher with temperature
+    teacher_s_conf_mat = torch.softmax(torch.log(teacher_s_conf_mat) / distill_temperature, dim=-1)
     NB_PLOT_PER_ROW = 5
     WORDS_TO_PLOT = [i for i in range(0, vocab_size, 1)]
     NB_ROW = math.ceil(len(WORDS_TO_PLOT) / NB_PLOT_PER_ROW)
@@ -248,6 +252,7 @@ def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teache
         ax.plot(student_s_conf_mat[word_id].numpy(), label='student')
         ax.plot(teacher_s_conf_mat[word_id].numpy(), label='teacher')
         ax.plot(final_s_conf_mat[word_id].numpy(), label='final')
+        ax.plot([word_id, word_id], [-0.1, 1.1], '--', label='true word')
         ax.legend()
         ax.set_title('word {}'.format(word_id))
         ax.set_ylim([-0.1, 1.1])
