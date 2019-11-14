@@ -28,6 +28,7 @@ def get_args():
     parser.add_argument('-init_weight', action='store_true', help='Use the ckpt weights')
     parser.add_argument('-distill_temperature', type=float, default=0, help='If 0 fit with argmax, else use '
                                                                             'soft label with that temperature')
+    parser.add_argument('-sequential', action='store_true', help='Use sequential distillation')
     parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
                                                                           'of that steps before')
     parser.add_argument('-s_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
@@ -64,7 +65,8 @@ def _load_pretrained_agents(args):
     return speaker, s_opt, listener, l_opt
 
 
-def listener_imitate(game, student_listener, teacher_listener, max_steps, temperature=0, with_eval=False):
+def listener_imitate(game, student_listener, teacher_listener, max_steps, temperature=0, with_eval=False,
+                     distilled_speaker=None):
     l_opt = torch.optim.Adam(lr=5e-5, params=student_listener.parameters())
     dset = Dataset(game=game, train_size=1)
     step = 0
@@ -74,8 +76,15 @@ def listener_imitate(game, student_listener, teacher_listener, max_steps, temper
             if step >= max_steps:
                 break
 
+            # Generate the msg
+            objs = game.get_random_objs(50)
+            if distilled_speaker is None:
+                msgs = game.objs_to_msg(game.get_random_objs(50))
+            else:
+                with torch.no_grad():
+                    msgs = torch.argmax(distilled_speaker(objs), -1)
+
             # Train for a batch
-            msgs = game.objs_to_msg(game.get_random_objs(50))
             imitate_listener_batch(student_listener, teacher_listener, l_opt, msgs, temperature)
             step += 1
 
@@ -194,8 +203,18 @@ def iteration_selfplay(args):
                 _, teacher_s_conf_mat, _ = eval_loop(dset.val_generator(1000), teacher_listener, teacher_speaker, game)
                 speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
                                 max_steps=args.s_transmission_steps, temperature=args.distill_temperature)
-                listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
-                                 max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
+
+                # Distill using distilled speaker msg
+                if args.sequential:
+                    print('Distill sequentially')
+                    listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
+                                     max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
+                                     distilled_speaker=speaker)
+
+                # Distill using unlimited msg
+                else:
+                    listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
+                                     max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
                 _, final_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
 
                 img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
