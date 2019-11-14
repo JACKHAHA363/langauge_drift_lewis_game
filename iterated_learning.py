@@ -13,7 +13,6 @@ from drift.gumbel import selfplay_batch
 from drift.pretrain import imitate_listener_batch, imitate_speak_batch
 from drift import USE_GPU
 
-STEPS = 400000
 LOG_STEPS = 100
 
 
@@ -22,6 +21,7 @@ def get_args():
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
 
     # For transmission
+    parser.add_argument('-init_weight', action='store_true', help='Use the ckpt weights')
     parser.add_argument('-distill_temperature', type=float, default=0, help='If 0 fit with argmax, else use '
                                                                             'soft label with that temperature')
     parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
@@ -33,6 +33,7 @@ def get_args():
     parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
+    parser.add_argument('-steps', default=10000, type=int, help='Total training steps')
 
     # For gumbel
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
@@ -149,6 +150,13 @@ def iteration_selfplay(args):
     """ Load checkpoints """
     # Load populations
     speaker, s_opt, listener, l_opt = _load_pretrained_agents(args)
+    teacher_speaker = speaker.from_state_dict(speaker.env_config, speaker.state_dict())
+    teacher_listener = listener.from_state_dict(listener.env_config, listener.state_dict())
+    if USE_GPU:
+        teacher_speaker.cuda()
+        teacher_listener.cuda()
+    s_ckpt = deepcopy(speaker.state_dict())
+    l_ckpt = deepcopy(listener.state_dict())
     game = LewisGame(**speaker.env_config)
     dset = Dataset(game, 1)
     if os.path.exists(args.logdir):
@@ -158,10 +166,8 @@ def iteration_selfplay(args):
     # Training
     temperature = args.temperature
     vocab_change_data = {'speak': [], 'listen': []}
-    s_ckpt = deepcopy(speaker.state_dict())
-    l_ckpt = deepcopy(listener.state_dict())
     try:
-        for step in range(STEPS):
+        for step in range(args.steps):
             # Train for a Batch
             speaker.train(True)
             listener.train(True)
@@ -171,10 +177,10 @@ def iteration_selfplay(args):
             # Check if randomly reset one of speaker or listener to previous ckpt
             if (step + 1) % args.generation_steps == 0:
                 # Restore to old version and start transmission
-                teacher_speaker = speaker.from_state_dict(speaker.env_config, speaker.state_dict())
+                teacher_speaker.load_state_dict(speaker.state_dict())
                 teacher_speaker.train(False)
                 speaker.load_state_dict(s_ckpt)
-                teacher_listener = listener.from_state_dict(listener.env_config, listener.state_dict())
+                teacher_listener.load_state_dict(listener.state_dict())
                 teacher_listener.train(False)
                 listener.load_state_dict(l_ckpt)
 
@@ -184,9 +190,10 @@ def iteration_selfplay(args):
                 listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
                                  max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
 
-                # Save for future student
-                s_ckpt = deepcopy(speaker.state_dict())
-                l_ckpt = deepcopy(listener.state_dict())
+                # Save for future student if do not use initial weight
+                if not args.init_weight:
+                    s_ckpt = deepcopy(speaker.state_dict())
+                    l_ckpt = deepcopy(listener.state_dict())
 
             # Eval and Logging
             if step % LOG_STEPS == 0:

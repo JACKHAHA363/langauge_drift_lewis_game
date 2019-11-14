@@ -5,7 +5,7 @@ import numpy as np
 
 VAL_BATCH_SIZE = 1000
 LOG_STEPS = 10
-MAX_STEPS = 2000
+MAX_STEPS = 5000
 
 
 def imitate_listener_batch(student, teacher, opt, msgs, temperature=0):
