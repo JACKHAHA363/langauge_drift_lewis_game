@@ -112,7 +112,7 @@ def population_selfplay(args):
     if args.save_vocab_change is not None:
         for key, val in vocab_change_data.items():
             vocab_change_data[key] = torch.stack(val)
-        torch.save(vocab_change_data, 'zzz_vocab_data.pth')
+        torch.save(vocab_change_data, args.save_vocab_change)
 
     if args.save_population is not None:
         for idx, ((speaker, _), (listener, _)) in enumerate(zip(s_and_opts, l_and_opts)):

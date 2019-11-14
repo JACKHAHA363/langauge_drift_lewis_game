@@ -5,7 +5,10 @@ import os
 import argparse
 from copy import deepcopy
 import torch
-import random
+import numpy as np
+import math
+import matplotlib.pyplot as plt
+import io
 from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
@@ -185,10 +188,17 @@ def iteration_selfplay(args):
                 listener.load_state_dict(l_ckpt)
 
                 print('Start transmission')
+                # Randomly pick some word for initialization
+                _, student_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
+                _, teacher_s_conf_mat, _ = eval_loop(dset.val_generator(1000), teacher_listener, teacher_speaker, game)
                 speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
                                 max_steps=args.s_transmission_steps, temperature=args.distill_temperature)
                 listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
                                  max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
+                _, final_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
+
+                img = plot_distill_change(game.vocab_size, final_s_conf_mat, student_s_conf_mat, teacher_s_conf_mat)
+                writer.add_image('distill_change', img, step)
 
                 # Save for future student if do not use initial weight
                 if not args.init_weight:
@@ -201,8 +211,8 @@ def iteration_selfplay(args):
                 listener.train(False)
                 stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
                                                           speaker=speaker, game=game)
-                writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
-                writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
+                #writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
+                #writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
 
                 if args.save_vocab_change is not None:
                     vocab_change_data['speak'].append(s_conf_mat)
@@ -225,7 +235,35 @@ def iteration_selfplay(args):
     if args.save_vocab_change is not None:
         for key, val in vocab_change_data.items():
             vocab_change_data[key] = torch.stack(val)
-        torch.save(vocab_change_data, 'zzz_vocab_data.pth')
+        torch.save(vocab_change_data, args.save_vocab_change)
+
+
+def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teacher_s_conf_mat):
+    NB_PLOT_PER_ROW = 5
+    WORDS_TO_PLOT = [i for i in range(0, vocab_size, 1)]
+    NB_ROW = math.ceil(len(WORDS_TO_PLOT) / NB_PLOT_PER_ROW)
+    fig, axs = plt.subplots(NB_ROW, NB_PLOT_PER_ROW, figsize=(int(80 / NB_ROW),
+                                                              int(80 / NB_PLOT_PER_ROW)))
+    for word_id, ax in zip(range(vocab_size), axs.reshape(-1)):
+        ax.plot(student_s_conf_mat[word_id].numpy(), label='student')
+        ax.plot(teacher_s_conf_mat[word_id].numpy(), label='teacher')
+        ax.plot(final_s_conf_mat[word_id].numpy(), label='final')
+        ax.legend()
+        ax.set_title('word {}'.format(word_id))
+        ax.set_ylim([-0.1, 1.1])
+    
+    # Convert to array
+    # draw the renderer
+    fig.canvas.draw()
+
+    # Get the RGBA buffer from the figure
+    w, h = fig.canvas.get_width_height()
+    buf = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8)
+    buf.shape = (w, h, 4)
+
+    # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
+    buf = np.roll(buf, 3, axis=2)
+    return buf.transpose([2, 0, 1])
 
 
 if __name__ == '__main__':
