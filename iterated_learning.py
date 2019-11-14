@@ -22,6 +22,7 @@ LOG_STEPS = 100
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
+    parser.add_argument('-seed', default=None, type=int, help='The global seed')
 
     # For transmission
     parser.add_argument('-init_weight', action='store_true', help='Use the ckpt weights')
@@ -197,8 +198,10 @@ def iteration_selfplay(args):
                                  max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
                 _, final_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
 
-                img = plot_distill_change(game.vocab_size, final_s_conf_mat, student_s_conf_mat, teacher_s_conf_mat,
-                                          args.distill_temperature)
+                img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
+                                          student_s_conf_mat=student_s_conf_mat,
+                                          teacher_s_conf_mat=teacher_s_conf_mat,
+                                          distill_temperature=args.distill_temperature)
                 writer.add_image('distill_change', img, step)
 
                 # Save for future student if do not use initial weight
@@ -273,4 +276,7 @@ def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teache
 
 if __name__ == '__main__':
     args = get_args()
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
     iteration_selfplay(args)
