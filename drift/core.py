@@ -137,7 +137,7 @@ def eval_listener_loop(val_generator, listener):
 def _obj_prob_to_msg_prob(obj_probs):
     """
     :param obj_probs: [nb_obj, nb_type, nb_value]
-    :return: [nb_obj, nb_type * nb_value]
+    :return: [nb_obj, nb_type, nb_type * nb_value]
     """
     nb_obj, nb_type, nb_value = obj_probs.shape[0], obj_probs.shape[1], obj_probs.shape[2]
     result = torch.zeros([nb_obj, nb_type, nb_type * nb_value])
@@ -181,8 +181,8 @@ def eval_loop(val_generator, listener, speaker, game):
             s_corrects += (s_pred == msgs).float().sum().item()
             s_total += msgs.numel()
 
-            s_conf_mat[msgs.view(-1)] += s_probs.view([-1, vocab_size])
-            l_conf_mat[msgs.view(-1)] += _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size])
+            increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
+            increment_2d_matrix(l_conf_mat, msgs.view(-1), _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
 
             # Entropy
             l_ent += -(l_probs * torch.log(l_probs + 1e-32)).mean().item()
@@ -252,3 +252,18 @@ class Dataset:
                 batch_msgs = batch_msgs.cuda()
             yield batch_objs, batch_msgs
             start += batch_size
+
+
+def increment_2d_matrix(mat, row_id, row_updates):
+    """
+    :param row_id: [nb_indices]
+    :param row_updates: [nb_indices, nb_col]
+    """
+    nb_row, nb_col = mat.shape
+
+    # Build indices [nb_indices * nb_col]
+    col = torch.arange(0, nb_col)
+    indices = row_id[:, None] * nb_col + col[None, :]
+    indices = indices.view(-1)
+
+    mat.put_(indices, row_updates.view(-1), accumulate=True)
