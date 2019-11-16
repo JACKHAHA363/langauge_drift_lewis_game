@@ -8,12 +8,15 @@ from drift.core import BaseSpeaker, BaseListener
 class Speaker(BaseSpeaker):
     def __init__(self, env_config):
         super(Speaker, self).__init__(env_config)
-        self.hidden_size = 200
+        self.hidden_size = 50
         self.len = self.env_config['p']
         self.obj_to_h = torch.nn.Linear(self.env_config['p'] * self.env_config['t'], self.hidden_size)
         self.embeddings = torch.nn.Embedding(num_embeddings=self.env_config['p'] * self.env_config['t'],
                                              embedding_dim=self.hidden_size)
-        self.gru = torch.nn.GRUCell(self.hidden_size, self.hidden_size)
+        #self.gru = torch.nn.GRUCell(self.hidden_size, self.hidden_size)
+        # Not using GRUCell because the potential speed-up in teacher forcing
+        self.gru = torch.nn.GRU(self.hidden_size, self.hidden_size, batch_first=True)
+
         self.linear_dec = torch.nn.Linear(self.hidden_size, self.env_config['p'] * self.env_config['t'], bias=False)
 
         # This act as the embedding of <bos>
@@ -40,11 +43,8 @@ class Speaker(BaseSpeaker):
         # Enc obj to state [bsz, hidden_size]
         oh_objs = self._one_hot(objs)
         states = self.obj_to_h(oh_objs)
-        logits = []
-        for t in range(self.len):
-            states = self.gru.forward(inp_embs[:, t, :], states)
-            logits.append(self.linear_dec(states))
-        logits = torch.stack(logits, dim=1)
+        rnn_out, _ = self.gru(inp_embs, states.unsqueeze(0))
+        logits = self.linear_dec(rnn_out)
         return logits
 
     def greedy(self, objs):
@@ -57,8 +57,8 @@ class Speaker(BaseSpeaker):
         states = self.obj_to_h(oh_objs)
         msgs = []
         for t in range(self.len):
-            states = self.gru.forward(inputs, states)
-            logits = self.linear_dec(states)
+            out, states = self._step_gru(inputs, states)
+            logits = self.linear_dec(out)
             words = torch.argmax(logits, dim=-1)
             msgs.append(words)
 
@@ -82,8 +82,8 @@ class Speaker(BaseSpeaker):
         msgs = []
         logprobs = []
         for t in range(self.len):
-            states = self.gru.forward(inputs, states)
-            logits = self.linear_dec(states)
+            out, states = self._step_gru(inputs, states)
+            logits = self.linear_dec(out)
             dist = torch.distributions.Categorical(logits=logits)
             words = dist.sample()
             msgs.append(words)
@@ -110,8 +110,8 @@ class Speaker(BaseSpeaker):
         msgs = []
         ys = []
         for t in range(self.len):
-            states = self.gru.forward(inputs, states)
-            logits = self.linear_dec(states)
+            out, states = self._step_gru(inputs, states)
+            logits = self.linear_dec(out)
             logprobs = F.log_softmax(logits, dim=-1)
             g = GUMBEL_DIST.sample(logits.shape)
             y = F.softmax((g + logprobs) / temperature, dim=-1)
@@ -140,11 +140,21 @@ class Speaker(BaseSpeaker):
         """ Repeating the first dim """
         return self.init_input.repeat([batch_size, 1])
 
+    def _step_gru(self, inputs, states):
+        """ Step our gru
+        :param inputs: [bsz, hidden_size]
+        :param states: [bsz, hidden_size]
+        :return out: [bsz, hidden_size],
+                next_states: [bsz, hidden_size]
+        """
+        out, next_states = self.gru(inputs.unsqueeze(1), states.unsqueeze(0))
+        return out.squeeze(1), next_states.squeeze(0)
+
 
 class Listener(BaseListener):
     def __init__(self, env_config):
         super(Listener, self).__init__(env_config)
-        self.hidden_size = 200
+        self.hidden_size = 50
         self.len = self.env_config['p']
 
         # Effectively an embedding
