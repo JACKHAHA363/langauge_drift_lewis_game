@@ -106,6 +106,16 @@ class BaseSpeaker(Agent):
         """
         raise NotImplementedError
 
+    def a2c(self, objs):
+        """ The method for decoding during policy gradient
+        :return a2c_info. A dict contains:
+                msgs: [bsz, len]
+                logprobs: [bsz, len]
+                ents: [bsz, len]
+                values [bsz, len]
+        """
+        raise NotImplementedError
+
 
 class BaseListener(Agent):
     """ Listener """

@@ -12,11 +12,14 @@ class Speaker(BaseSpeaker):
                                        bias=False)
         self.linear2 = torch.nn.Linear(200, self.env_config['p'] * self.env_config['p'] * self.env_config['t'],
                                        bias=False)
+        self.value_linear = torch.nn.Linear(200, 1)
         self.init_weight()
 
     def init_weight(self):
         torch.nn.init.normal_(self.linear1.weight, std=0.1)
         torch.nn.init.normal_(self.linear2.weight, std=0.1)
+        torch.nn.init.normal_(self.value_linear.weight, std=0.1)
+        torch.nn.init.zeros_(self.value_linear.bias)
 
     def greedy(self, objs):
         logits = self.get_logits(objs)
@@ -42,6 +45,19 @@ class Speaker(BaseSpeaker):
         oh_objs = self._one_hot(objs)
         logits = self.linear2(self.linear1(oh_objs))
         return logits.view(objs.shape[0], self.env_config['p'], -1)
+
+    def a2c(self, objs):
+        oh_objs = self._one_hot(objs)
+        obj_enc = self.linear1(oh_objs)
+        logits = self.linear2(obj_enc)
+        logits = logits.view(objs.shape[0], self.env_config['p'], -1)
+        dist = torch.distributions.Categorical(logits=logits)
+        ents = dist.entropy()
+        msgs = dist.sample()
+        logprobs = dist.log_prob(msgs)
+        values = self.value_linear(obj_enc)
+        return {'msgs': msgs, 'logprobs': logprobs,
+                'ents': ents, 'values': values}
 
     def _one_hot(self, objs):
         """ Make input a concatenation of one-hot

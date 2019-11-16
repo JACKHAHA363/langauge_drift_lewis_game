@@ -1,18 +1,8 @@
-from drift.core import LewisGame, get_comm_acc, eval_loop, Dataset
-from drift.linear import Speaker, Listener
 import torch
-import os
 import numpy as np
-from shutil import rmtree
-from tensorboardX import SummaryWriter
 from torch.distributions import Categorical
 
-SPEAKER_CKPT = "./s_sl.pth"
-LISTENER_CKPT = './l_sl.pth'
-TRAIN_STEPS = 10000
 BATCH_SIZE = 500
-LOG_STEPS = 50
-LOG_NAME = 'log_pg'
 
 
 # class ExponentialMovingAverager:
@@ -39,7 +29,7 @@ class ExponentialMovingAverager:
 
 
 def selfplay_batch(game, l_opt, listener, s_opt, speaker, ema_reward=None):
-    """ Use exponential reward
+    """ Use exponential reward (kinda depricated not working)
     :return updated average reward
     """
     # Generate batch
@@ -74,3 +64,32 @@ def selfplay_batch(game, l_opt, listener, s_opt, speaker, ema_reward=None):
     s_opt.step()
     return ema_reward
 
+
+def selfplay_batch_a2c(game, l_opt, listener, s_opt, speaker, value_coef, ent_coef):
+    """ Use a learnt value function """
+    # Generate batch
+    objs = game.get_random_objs(BATCH_SIZE)
+    a2c_info = speaker.a2c(objs)
+    oh_msgs = listener.one_hot(a2c_info['msgs'])
+    l_logits = listener.get_logits(oh_msgs)
+
+    # Train listener
+    l_logprobs = Categorical(logits=l_logits).log_prob(objs)
+    l_logprobs = l_logprobs.sum(-1)
+    l_opt.zero_grad()
+    (-l_logprobs.mean()).backward(retain_graph=True)
+    l_opt.step()
+
+    # Policy gradient
+    rewards = l_logprobs.detach()
+    v_loss = torch.mean((a2c_info['values'] - rewards[:, None]).pow(2))
+
+    adv = (rewards[:, None] - a2c_info['values']).detach()
+    reinforce = adv * a2c_info['logprobs']
+    p_loss = -reinforce.mean()
+
+    ent_loss = -a2c_info['ents'].mean()
+
+    s_opt.zero_grad()
+    (p_loss + value_coef * v_loss + ent_coef * ent_loss).backward()
+    s_opt.step()
