@@ -194,7 +194,8 @@ def eval_loop(val_generator, listener, speaker, game):
     """ Return accuracy as well as confusion matrix for symbols """
     l_corrects = 0
     l_total = 0
-    s_corrects = 0
+    s_tf_corrects = 0
+    s_gr_corrects = 0
     s_total = 0
     l_ent = 0
     s_ent = 0
@@ -209,16 +210,19 @@ def eval_loop(val_generator, listener, speaker, game):
         l_conf_mat = l_conf_mat.cuda()
     for objs, msgs in val_generator:
         with torch.no_grad():
-            l_logits = listener(listener.one_hot(msgs))
+            l_logits = listener.get_logits(listener.one_hot(msgs))
             l_pred = torch.argmax(l_logits, dim=-1)
             l_probs = softmax(l_logits, dim=-1)
             l_corrects += (l_pred == objs).float().sum().item()
             l_total += objs.numel()
 
-            s_logits = speaker(objs)
+            s_logits = speaker.get_logits(objs=objs, msgs=msgs)
             s_pred = torch.argmax(s_logits, dim=-1)
             s_probs = softmax(s_logits, dim=-1)
-            s_corrects += (s_pred == msgs).float().sum().item()
+            s_tf_corrects += (s_pred == msgs).float().sum().item()
+
+            gr_msgs = speaker.greedy(objs=objs)
+            s_gr_corrects += (gr_msgs == msgs).float().sum().item()
             s_total += msgs.numel()
 
             increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
@@ -231,7 +235,8 @@ def eval_loop(val_generator, listener, speaker, game):
 
     s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
     l_conf_mat /= (1e-32 + torch.sum(l_conf_mat, -1, keepdim=True))
-    return {'listen/acc': l_corrects / l_total, 'speak/acc': s_corrects / s_total,
+    return {'listen/acc': l_corrects / l_total,
+            'speak/tf_acc': s_tf_corrects / s_total, 'speak/gr_acc': s_gr_corrects / s_total,
             'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch }, s_conf_mat, l_conf_mat
 
 

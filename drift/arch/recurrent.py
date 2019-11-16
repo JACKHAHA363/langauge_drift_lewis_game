@@ -154,7 +154,7 @@ class Listener(BaseListener):
 
         # A learnable parameter for init states
         self.init_states = torch.nn.Parameter(torch.rand(1, 1, self.hidden_size), requires_grad=True)
-        self.linear_out = torch.nn.Linear(self.hidden_size, self.env_config['p'] * self.env_config['t'])
+        self.linear_out = torch.nn.Linear(self.hidden_size, self.env_config['t'])
         self.init_weight()
 
     def init_weight(self):
