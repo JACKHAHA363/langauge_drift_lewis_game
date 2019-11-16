@@ -1,6 +1,8 @@
 import torch
+import torch.nn.functional as F
 
 from drift.core import BaseSpeaker, BaseListener
+from drift import GUMBEL_DIST
 
 
 class Speaker(BaseSpeaker):
@@ -16,7 +18,26 @@ class Speaker(BaseSpeaker):
         torch.nn.init.normal_(self.linear1.weight, std=0.1)
         torch.nn.init.normal_(self.linear2.weight, std=0.1)
 
-    def forward(self, objs):
+    def greedy(self, objs):
+        logits = self.get_logits(objs)
+        return torch.argmax(logits, -1)
+
+    def gumbel(self, objs, temperature=1):
+        logits = self.get_logits(objs)
+        logprobs = F.log_softmax(logits, dim=-1)
+        g = GUMBEL_DIST.sample(logits.shape)
+        y = F.softmax((g + logprobs) / temperature, dim=-1)
+        msgs = torch.argmax(y, dim=-1)
+        return y, msgs
+
+    def sample(self, objs):
+        logits = self.get_logits(objs)
+        dist = torch.distributions.Categorical(logits=logits)
+        msgs = dist.sample()
+        logprobs = dist.log_prob(msgs)
+        return logprobs, msgs
+
+    def get_logits(self, objs, msgs=None):
         """ return [bsz, nb_prop, vocab_size] """
         oh_objs = self._one_hot(objs)
         logits = self.linear2(self.linear1(oh_objs))
@@ -46,17 +67,5 @@ class Listener(BaseListener):
         torch.nn.init.normal_(self.linear1.weight, std=0.1)
         torch.nn.init.normal_(self.linear2.weight, std=0.1)
 
-    def forward(self, oh_msgs):
-        """ return [bsz, nb_prop, type_size] """
+    def get_logits(self, oh_msgs):
         return self.linear2(self.linear1(oh_msgs))
-
-    def one_hot(self, msgs):
-        """
-        :param msgs: [bsz, nb_props]
-        :return: [bsz, nb_props, vocab_size]
-        """
-        oh_msgs = torch.Tensor(size=[msgs.shape[0], msgs.shape[1], self.env_config['p'] * self.env_config['t']])
-        oh_msgs = oh_msgs.to(device=msgs.device)
-        oh_msgs.zero_()
-        oh_msgs.scatter_(2, msgs.unsqueeze(-1), 1)
-        return oh_msgs

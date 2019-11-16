@@ -77,21 +77,57 @@ class Agent(torch.nn.Module):
 
 class BaseSpeaker(Agent):
     """ Speaker model """
+    def greedy(self, objs):
+        """ Just for evaluate
+        :return msg [bsz, len]
+        """
+        raise NotImplementedError
 
-    def get_logits(self, objs):
-        """ Return [bsz, nb_props, vocab_size] """
-        return self.forward(objs)
+    def sample(self, objs):
+        """ Return: logprobs, sample_msg
+        :return logprobs [bsz, len]
+                sample_msg [bsz, len]
+        """
+        raise NotImplementedError
+
+    def gumbel(self, objs, temperature=1):
+        """ Return y, gumbel_msg
+        :return y: [bsz, len, vocab_size]
+                    F.softmax(gumbel_noise + logprobs) / temperature)
+                gumbel_msg: [bsz, len]
+        """
+        raise NotImplementedError
+
+    def get_logits(self, objs, msgs):
+        """ Compute log P(msgs | objs)
+        :param objs: [bsz, nb_props]
+        :param msgs: [bsz, nb_props]
+        :return: logits. [bsz, nb_props, vocab_size]
+        """
+        raise NotImplementedError
 
 
 class BaseListener(Agent):
     """ Listener """
 
-    def get_logits(self, msgs):
+    def get_logits(self, oh_msgs):
         """ Method for testing
-        :param msgs: [bsz, nb_props]
-        :return: objs: [bsz, nb_props, nb_types]
+        :param oh_msgs: [bsz, nb_props, vocab_size]
+        :param objs: [bsz, nb_props]
+        :return: logits: [bsz, nb_props, nb_types]
         """
-        return self.forward(msgs)
+        raise NotImplementedError
+
+    def one_hot(self, msgs):
+        """
+        :param msgs: [bsz, nb_props]
+        :return: [bsz, nb_props, vocab_size]
+        """
+        oh_msgs = torch.Tensor(size=[msgs.shape[0], msgs.shape[1], self.env_config['p'] * self.env_config['t']])
+        oh_msgs = oh_msgs.to(device=msgs.device)
+        oh_msgs.zero_()
+        oh_msgs.scatter_(2, msgs.unsqueeze(-1), 1)
+        return oh_msgs
 
 
 @timeit('get_comm_acc')
@@ -100,9 +136,8 @@ def get_comm_acc(val_generator, listener, speaker):
     total = 0
     for objs, _ in val_generator:
         with torch.no_grad():
-            s_logits = speaker(objs)
-            msgs = torch.argmax(s_logits, dim=-1)
-            l_logits = listener(listener.one_hot(msgs))
+            msgs = speaker.greedy(objs)
+            l_logits = listener.get_logits(listener.one_hot(msgs))
             preds = torch.argmax(l_logits, dim=-1)
             corrects += (preds == objs).float().sum().item()
             total += objs.numel()
@@ -111,15 +146,20 @@ def get_comm_acc(val_generator, listener, speaker):
 
 def eval_speaker_loop(val_generator, speaker):
     """ Return stats """
-    s_corrects = 0
-    s_total = 0
+    tf_corrects = 0
+    gr_corrects = 0
+    total = 0
     for objs, msgs in val_generator:
         with torch.no_grad():
-            s_logits = speaker(objs)
-            s_pred = torch.argmax(s_logits, dim=-1)
-            s_corrects += (s_pred == msgs).float().sum().item()
-            s_total += msgs.numel()
-    return {'s_acc': s_corrects / s_total}
+            logits = speaker.get_logits(objs=objs, msgs=msgs)
+            pred = torch.argmax(logits, dim=-1)
+            tf_corrects += (pred == msgs).float().sum().item()
+
+            gr_msgs = speaker.greedy(objs)
+            gr_corrects += (gr_msgs == msgs).float().sum().item()
+            total += msgs.numel()
+    return {'speak/tf_acc': tf_corrects / total,
+            'speak/gr_acc': gr_corrects / total}
 
 
 def eval_listener_loop(val_generator, listener):
@@ -127,7 +167,7 @@ def eval_listener_loop(val_generator, listener):
     l_total = 0
     for objs, msgs in val_generator:
         with torch.no_grad():
-            l_logits = listener(listener.one_hot(msgs))
+            l_logits = listener.get_logits(listener.one_hot(msgs))
             l_pred = torch.argmax(l_logits, dim=-1)
             l_corrects += (l_pred == objs).float().sum().item()
             l_total += objs.numel()
