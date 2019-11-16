@@ -24,7 +24,7 @@ def imitate_listener_batch(student, teacher, opt, msgs, temperature=0):
 
     else:
         soft_label = torch.nn.functional.softmax(teacher_logits / temperature, -1)
-        student_logits = student(oh_msgs)
+        student_logits = student.get_logits(oh_msgs)
         student_logprobs = torch.nn.functional.log_softmax(student_logits, -1)
         loss = -(soft_label * student_logprobs).sum(-1).sum(-1).mean()
         opt.zero_grad()

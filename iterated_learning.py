@@ -82,8 +82,7 @@ def listener_imitate(game, student_listener, teacher_listener, max_steps, temper
                 msgs = game.objs_to_msg(game.get_random_objs(50))
             else:
                 with torch.no_grad():
-                    logits = distilled_speaker(objs)
-                    msgs = torch.distributions.Categorical(logits=logits).sample()
+                    _, msgs = distilled_speaker.sample(objs)
                     #msgs = torch.argmax(logits, -1)
 
             # Train for a batch
