@@ -18,6 +18,7 @@ class Speaker(BaseSpeaker):
         self.gru = torch.nn.GRU(self.hidden_size, self.hidden_size, batch_first=True)
 
         self.linear_dec = torch.nn.Linear(self.hidden_size, self.env_config['p'] * self.env_config['t'], bias=False)
+        self.value_linear = torch.nn.Linear(self.hidden_size, 1, bias=True)
 
         # This act as the embedding of <bos>
         self.init_input = torch.nn.Parameter(torch.rand(1, self.hidden_size), requires_grad=True)
@@ -27,6 +28,8 @@ class Speaker(BaseSpeaker):
         torch.nn.init.normal_(self.linear_dec.weight, std=0.1)
         torch.nn.init.normal_(self.obj_to_h.weight, std=0.1)
         torch.nn.init.zeros_(self.obj_to_h.bias)
+        torch.nn.init.normal_(self.value_linear.weight, std=0.1)
+        torch.nn.init.zeros_(self.value_linear.bias)
         torch.nn.init.uniform_(self.embeddings.weight, -0.1, 0.1)
 
     def get_logits(self, objs, msgs):
@@ -124,6 +127,32 @@ class Speaker(BaseSpeaker):
         msgs = torch.stack(msgs, dim=1)
         ys = torch.stack(ys, dim=1)
         return ys, msgs
+
+    def a2c(self, objs):
+        # inputs [bsz, hidden_size]
+        bsz = objs.shape[0]
+        inputs = self._prepare_init_input(bsz)
+
+        # Enc obj to state [bsz, hidden_size]
+        oh_objs = self._one_hot(objs)
+        states = self.obj_to_h(oh_objs)
+        a2c_info = {'msgs': [], 'logprobs': [],
+                    'ents': [], 'values': []}
+        for t in range(self.len):
+            out, states = self._step_gru(inputs, states)
+            logits = self.linear_dec(out)
+            dist = torch.distributions.Categorical(logits=logits)
+            words = dist.sample()
+            a2c_info['msgs'].append(words)
+            a2c_info['logprobs'].append(dist.log_prob(words))
+            a2c_info['ents'].append(dist.entropy())
+            a2c_info['values'].append(self.value_linear(out).squeeze(-1))
+
+            # Prepare next inputs
+            inputs = self.embeddings(words)
+        for key, tensor in a2c_info.items():
+            a2c_info[key] = torch.stack(tensor, dim=1)
+        return a2c_info
 
     def _one_hot(self, objs):
         """ Make input a concatenation of one-hot
