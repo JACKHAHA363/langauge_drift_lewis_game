@@ -92,6 +92,8 @@ def population_selfplay(args):
                 temperature = max(args.min_temperature, temperature * args.decay_rate)
             elif args.method == 'a2c':
                 selfplay_batch_a2c(game, l_opt, listener, s_opt, speaker, args.v_coef, args.ent_coef)
+            else:
+                raise NotImplementedError
 
             # Eval and Logging
             if step % LOG_STEPS == 0:

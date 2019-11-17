@@ -13,6 +13,7 @@ from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
 from drift.gumbel import selfplay_batch
+from drift.a2c import selfplay_batch_a2c
 from drift.pretrain import imitate_listener_batch, imitate_speak_batch
 from drift import USE_GPU
 
@@ -39,11 +40,16 @@ def get_args():
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
     parser.add_argument('-steps', default=10000, type=int, help='Total training steps')
+    parser.add_argument('-method', choices=['gumbel', 'a2c'], default='gumbel', help='Which way to train')
 
     # For gumbel
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
     parser.add_argument('-decay_rate', type=float, default=1., help='temperature decay rate. Default no decay')
     parser.add_argument('-min_temperature', type=float, default=1, help='Minimum temperature')
+
+    # For a2c
+    parser.add_argument('-v_coef', type=float, default=0.5, help='Value loss coefficient')
+    parser.add_argument('-ent_coef', type=float, default=0.001, help='entropy reg coefficient')
     return parser.parse_args()
 
 
@@ -185,8 +191,13 @@ def iteration_selfplay(args):
             # Train for a Batch
             speaker.train(True)
             listener.train(True)
-            selfplay_batch(game, temperature, l_opt, listener, s_opt, speaker)
-            temperature = max(args.min_temperature, temperature * args.decay_rate)
+            if args.method == 'gumbel':
+                selfplay_batch(game, temperature, l_opt, listener, s_opt, speaker)
+                temperature = max(args.min_temperature, temperature * args.decay_rate)
+            elif args.method == 'a2c':
+                selfplay_batch_a2c(game, l_opt, listener, s_opt, speaker, args.v_coef, args.ent_coef)
+            else:
+                raise NotImplementedError
 
             # Check if randomly reset one of speaker or listener to previous ckpt
             if (step + 1) % args.generation_steps == 0:
@@ -296,6 +307,7 @@ def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teache
 
 if __name__ == '__main__':
     args = get_args()
+    print('Train with:', args.method)
     if args.seed is not None:
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
