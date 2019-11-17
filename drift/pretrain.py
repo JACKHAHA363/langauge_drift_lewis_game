@@ -15,7 +15,7 @@ def imitate_listener_batch(student, teacher, opt, msgs, temperature=0):
     # Generate target obj
     with torch.no_grad():
         oh_msgs = teacher.one_hot(msgs)
-        teacher_logits = teacher(oh_msgs)
+        teacher_logits = teacher.get_logits(oh_msgs)
 
     # Train with argmax
     if temperature == 0:
@@ -24,7 +24,7 @@ def imitate_listener_batch(student, teacher, opt, msgs, temperature=0):
 
     else:
         soft_label = torch.nn.functional.softmax(teacher_logits / temperature, -1)
-        student_logits = student(oh_msgs)
+        student_logits = student.get_logits(oh_msgs)
         student_logprobs = torch.nn.functional.log_softmax(student_logits, -1)
         loss = -(soft_label * student_logprobs).sum(-1).sum(-1).mean()
         opt.zero_grad()
@@ -36,18 +36,18 @@ def imitate_speak_batch(student, teacher, opt, objs, temperature=0):
     """ Imitate teacher on this batch. If temperature > 0, it's imitate soft label.
         Else imitate argmax
     """
-    # Generate target obj
+    # Generate context msg
     with torch.no_grad():
-        teacher_logits = teacher(objs)
+        msgs = teacher.greedy(objs)
 
     # Train with argmax
     if temperature == 0:
-        msgs = torch.argmax(teacher_logits, -1)
         train_speaker_batch(student, opt, objs, msgs)
 
     else:
+        teacher_logits = teacher.get_logits(msgs=msgs, objs=objs)
         soft_label = torch.nn.functional.softmax(teacher_logits / temperature, -1)
-        student_logits = student(objs)
+        student_logits = student.get_logits(objs=objs, msgs=msgs)
         student_logprobs = torch.nn.functional.log_softmax(student_logits, -1)
         loss = -(soft_label * student_logprobs).sum(-1).sum(-1).mean()
         opt.zero_grad()
@@ -56,7 +56,7 @@ def imitate_speak_batch(student, teacher, opt, objs, temperature=0):
 
 
 def train_listener_batch(listener, l_opt, objs, msgs):
-    l_logits = listener(listener.one_hot(msgs))
+    l_logits = listener.get_logits(listener.one_hot(msgs))
     l_logprobs = Categorical(logits=l_logits).log_prob(objs)
     l_opt.zero_grad()
     (-l_logprobs.mean()).backward()
@@ -65,7 +65,7 @@ def train_listener_batch(listener, l_opt, objs, msgs):
 
 def train_speaker_batch(speaker, s_opt, objs, msgs):
     """ Perform a train step """
-    s_logits = speaker(objs)
+    s_logits = speaker.get_logits(objs, msgs)
     s_logprobs = Categorical(logits=s_logits).log_prob(msgs)
     s_opt.zero_grad()
     (-s_logprobs.mean()).backward()
@@ -114,8 +114,8 @@ def train_speaker_until(acc, speaker, dset):
                     logstr = ["step {}:".format(step)]
                     for name, val in stats.items():
                         logstr.append("{}: {:.4f}".format(name, val))
-                        print(' '.join(logstr))
-                    if stats['s_acc'] >= acc:
+                    print(' '.join(logstr))
+                    if stats['speak/tf_acc'] >= acc:
                         should_stop = True
                         break
     except KeyboardInterrupt:
