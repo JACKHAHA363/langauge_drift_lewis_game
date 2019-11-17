@@ -25,6 +25,8 @@ def get_args():
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
     parser.add_argument('-save_population', default=None, help='Path to save the population. If None not save')
+    parser.add_argument('-s_lr', default=1e-3, type=float, help='learning rate for speaker')
+    parser.add_argument('-l_lr', default=1e-3, type=float, help='learning rate for listener')
     parser.add_argument('-method', choices=['gumbel', 'a2c'], default='gumbel', help='Which way to train')
 
     # Gumbel
@@ -45,13 +47,13 @@ def _load_population_and_opts(args, s_ckpts, l_ckpts):
         speaker = torch.load(os.path.join(args.ckpt_dir, s_ckpts[i]))
         if USE_GPU:
             speaker = speaker.cuda()
-        s_opt = torch.optim.Adam(lr=5e-5, params=speaker.parameters())
+        s_opt = torch.optim.Adam(lr=args.s_lr, params=speaker.parameters())
         s_and_opts.append([speaker, s_opt])
 
         listener = torch.load(os.path.join(args.ckpt_dir, l_ckpts[i]))
         if USE_GPU:
             listener = listener.cuda()
-        l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
+        l_opt = torch.optim.Adam(lr=args.l_lr, params=listener.parameters())
         l_and_opts.append([listener, l_opt])
     return s_and_opts, l_and_opts
 
