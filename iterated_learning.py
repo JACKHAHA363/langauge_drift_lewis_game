@@ -282,13 +282,13 @@ def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teache
     NB_PLOT_PER_ROW = 5
     WORDS_TO_PLOT = [i for i in range(0, vocab_size, 1)]
     NB_ROW = math.ceil(len(WORDS_TO_PLOT) / NB_PLOT_PER_ROW)
-    fig, axs = plt.subplots(NB_ROW, NB_PLOT_PER_ROW, figsize=(int(80 / NB_ROW),
-                                                              int(80 / NB_PLOT_PER_ROW)))
+    fig, axs = plt.subplots(NB_ROW, NB_PLOT_PER_ROW, figsize=(int(200 / NB_ROW),
+                                                              int(200 / NB_PLOT_PER_ROW)))
     for word_id, ax in zip(range(vocab_size), axs.reshape(-1)):
-        ax.plot(student_s_conf_mat[word_id].numpy(), label='student')
-        ax.plot(teacher_s_conf_mat[word_id].numpy(), label='teacher')
-        ax.plot(final_s_conf_mat[word_id].numpy(), label='final')
-        ax.plot([word_id, word_id], [-0.1, 1.1], '--', label='true word')
+        ax.plot(student_s_conf_mat[word_id].numpy(), '--', label='student',)
+        ax.plot(teacher_s_conf_mat[word_id].numpy(), '--', label='teacher')
+        ax.plot(final_s_conf_mat[word_id].numpy(), '--', label='final')
+        ax.plot([word_id, word_id], [-0.1, 1.1], 'r-', label='true word')
         ax.legend()
         ax.set_title('word {}'.format(word_id))
         ax.set_ylim([-0.1, 1.1])
