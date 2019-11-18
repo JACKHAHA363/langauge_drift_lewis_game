@@ -40,6 +40,8 @@ def get_args():
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
     parser.add_argument('-steps', default=10000, type=int, help='Total training steps')
+    parser.add_argument('-s_lr', default=1e-3, type=float, help='learning rate for speaker')
+    parser.add_argument('-l_lr', default=1e-3, type=float, help='learning rate for listener')
     parser.add_argument('-method', choices=['gumbel', 'a2c'], default='gumbel', help='Which way to train')
 
     # For gumbel
@@ -62,18 +64,18 @@ def _load_pretrained_agents(args):
     speaker = torch.load(os.path.join(args.ckpt_dir, 's0.pth'))
     if USE_GPU:
         speaker = speaker.cuda()
-    s_opt = torch.optim.Adam(lr=5e-5, params=speaker.parameters())
+    s_opt = torch.optim.Adam(lr=args.s_lr, params=speaker.parameters())
 
     listener = torch.load(os.path.join(args.ckpt_dir, 'l0.pth'))
     if USE_GPU:
         listener = listener.cuda()
-    l_opt = torch.optim.Adam(lr=5e-5, params=listener.parameters())
+    l_opt = torch.optim.Adam(lr=args.l_lr, params=listener.parameters())
     return speaker, s_opt, listener, l_opt
 
 
 def listener_imitate(game, student_listener, teacher_listener, max_steps, temperature=0, with_eval=False,
                      distilled_speaker=None):
-    l_opt = torch.optim.Adam(lr=5e-5, params=student_listener.parameters())
+    l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
     dset = Dataset(game=game, train_size=1)
     step = 0
     accs = []
@@ -124,7 +126,7 @@ def listener_imitate(game, student_listener, teacher_listener, max_steps, temper
 
 
 def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperature=0., with_eval=False):
-    s_opt = torch.optim.Adam(lr=5e-5, params=student_speaker.parameters())
+    s_opt = torch.optim.Adam(lr=1e-4, params=student_speaker.parameters())
     dset = Dataset(game=game, train_size=1)
     step = 0
     accs = []
