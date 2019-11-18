@@ -33,9 +33,11 @@ def get_args():
     parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
                                                                           'of that steps before')
     parser.add_argument('-s_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
-                                                                              'for speaker')
+                                                                              'for speaker. '
+                                                                              'If negative -1, no transmission')
     parser.add_argument('-l_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
-                                                                              'for listener')
+                                                                              'for listener.'
+                                                                              'If negative -1, no transmission')
     parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
@@ -206,24 +208,28 @@ def iteration_selfplay(args):
                 # Restore to old version and start transmission
                 teacher_speaker.load_state_dict(speaker.state_dict())
                 teacher_speaker.train(False)
-                speaker.load_state_dict(s_ckpt)
+                if args.s_transmission_steps >= 0:
+                    speaker.load_state_dict(s_ckpt)
                 teacher_listener.load_state_dict(listener.state_dict())
                 teacher_listener.train(False)
-                listener.load_state_dict(l_ckpt)
+                if args.l_transmission_steps >= 0:
+                    listener.load_state_dict(l_ckpt)
 
                 print('Start transmission')
                 # Randomly pick some word for initialization
                 _, student_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
                 _, teacher_s_conf_mat, _ = eval_loop(dset.val_generator(1000), teacher_listener, teacher_speaker, game)
-                speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
-                                max_steps=args.s_transmission_steps, temperature=args.distill_temperature)
+                if args.s_transmission_steps >= 0:
+                    speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
+                                    max_steps=args.s_transmission_steps, temperature=args.distill_temperature)
 
                 # Distill using distilled speaker msg
                 if args.sequential:
-                    print('Distill sequentially')
-                    listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
-                                     max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
-                                     distilled_speaker=speaker)
+                    if args.l_transmission_steps >= 0:
+                        print('Distill sequentially')
+                        listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
+                                         max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
+                                         distilled_speaker=speaker)
 
                 # Distill using unlimited msg
                 else:
@@ -235,7 +241,7 @@ def iteration_selfplay(args):
                                           student_s_conf_mat=student_s_conf_mat,
                                           teacher_s_conf_mat=teacher_s_conf_mat,
                                           distill_temperature=args.distill_temperature)
-                writer.add_image('distill_change', img, step)
+                img.savefig(os.path.join(args.logdir, 'distill_{}.png'.format(step)))
 
                 # Save for future student if do not use initial weight
                 if not args.init_weight:
@@ -248,8 +254,8 @@ def iteration_selfplay(args):
                 listener.train(False)
                 stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
                                                           speaker=speaker, game=game)
-                #writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
-                #writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
+                writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
+                writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
 
                 if args.save_vocab_change is not None:
                     vocab_change_data['speak'].append(s_conf_mat)
@@ -282,8 +288,8 @@ def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teache
     NB_PLOT_PER_ROW = 5
     WORDS_TO_PLOT = [i for i in range(0, vocab_size, 1)]
     NB_ROW = math.ceil(len(WORDS_TO_PLOT) / NB_PLOT_PER_ROW)
-    fig, axs = plt.subplots(NB_ROW, NB_PLOT_PER_ROW, figsize=(int(200 / NB_ROW),
-                                                              int(200 / NB_PLOT_PER_ROW)))
+    fig, axs = plt.subplots(NB_ROW, NB_PLOT_PER_ROW, figsize=(int(100 / NB_ROW),
+                                                              int(100 / NB_PLOT_PER_ROW)))
     for word_id, ax in zip(range(vocab_size), axs.reshape(-1)):
         ax.plot(student_s_conf_mat[word_id].numpy(), '--', label='student',)
         ax.plot(teacher_s_conf_mat[word_id].numpy(), '--', label='teacher')
@@ -292,19 +298,20 @@ def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teache
         ax.legend()
         ax.set_title('word {}'.format(word_id))
         ax.set_ylim([-0.1, 1.1])
-    
-    # Convert to array
-    # draw the renderer
-    fig.canvas.draw()
 
-    # Get the RGBA buffer from the figure
-    w, h = fig.canvas.get_width_height()
-    buf = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8)
-    buf.shape = (w, h, 4)
+    return fig
+    ## Convert to array
+    ## draw the renderer
+    #fig.canvas.draw()
 
-    # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
-    buf = np.roll(buf, 3, axis=2)
-    return buf.transpose([2, 0, 1])
+    ## Get the RGBA buffer from the figure
+    #w, h = fig.canvas.get_width_height()
+    #buf = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8)
+    #buf.shape = (w, h, 4)
+
+    ## canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
+    #buf = np.roll(buf, 3, axis=2)
+    #return buf.transpose([2, 0, 1])
 
 
 if __name__ == '__main__':
