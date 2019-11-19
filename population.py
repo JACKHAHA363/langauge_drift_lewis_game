@@ -6,6 +6,7 @@ import os
 import argparse
 import random
 import torch
+import numpy as np
 from shutil import rmtree
 from tensorboardX import SummaryWriter
 from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
@@ -13,13 +14,14 @@ from drift.gumbel import selfplay_batch
 from drift.a2c import selfplay_batch_a2c
 from drift import USE_GPU
 
-STEPS = 400000
 LOG_STEPS = 100
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
+    parser.add_argument('-steps', default=12000, type=int, help='total training steps')
+    parser.add_argument('-seed', default=None, type=int, help='The global seed')
     parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-n', type=int, default=3, help="population size")
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
@@ -81,7 +83,7 @@ def population_selfplay(args):
     temperature = args.temperature
     vocab_change_data = {'speak': [], 'listen': []}
     try:
-        for step in range(STEPS):
+        for step in range(args.steps):
             # Randomly pick one pair
             speaker, s_opt = random.choice(s_and_opts)
             listener, l_opt = random.choice(l_and_opts)
@@ -137,5 +139,8 @@ def population_selfplay(args):
 
 if __name__ == '__main__':
     args = get_args()
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
     print('Train with:', args.method)
     population_selfplay(args)
