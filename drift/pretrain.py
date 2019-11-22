@@ -32,7 +32,7 @@ def imitate_listener_batch(student, teacher, opt, msgs, temperature=0):
         opt.step()
 
 
-def imitate_speak_batch(student, teacher, opt, objs, temperature=0):
+def imitate_speak_batch(student, teacher, opt, objs, temperature=0, use_sample=False):
     """ Imitate teacher on this batch. If temperature > 0, it's imitate soft label.
         Else imitate argmax
     """
@@ -44,7 +44,7 @@ def imitate_speak_batch(student, teacher, opt, objs, temperature=0):
     if temperature == 0:
         train_speaker_batch(student, opt, objs, msgs)
 
-    else:
+    elif not use_sample:
         teacher_logits = teacher.get_logits(msgs=msgs, objs=objs)
         soft_label = torch.nn.functional.softmax(teacher_logits / temperature, -1)
         student_logits = student.get_logits(objs=objs, msgs=msgs)
@@ -53,6 +53,11 @@ def imitate_speak_batch(student, teacher, opt, objs, temperature=0):
         opt.zero_grad()
         loss.backward()
         opt.step()
+
+    else:
+        teacher_logits = teacher.get_logits(msgs=msgs, objs=objs)
+        msgs = torch.distributions.Categorical(logits=teacher_logits / temperature).sample()
+        train_speaker_batch(student, opt, objs, msgs)
 
 
 def train_listener_batch(listener, l_opt, objs, msgs):
