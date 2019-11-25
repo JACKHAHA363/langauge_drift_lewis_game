@@ -192,7 +192,7 @@ def iteration_selfplay(args):
 
     # Training
     temperature = args.temperature
-    vocab_change_data = {'speak': [], 'listen': []}
+    vocab_change_data = {'speak': [], 'listen': [], 'listen_gr': []}
     try:
         for step in range(args.steps):
             # Train for a Batch
@@ -256,14 +256,17 @@ def iteration_selfplay(args):
             if step % LOG_STEPS == 0:
                 speaker.train(False)
                 listener.train(False)
-                stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
-                                                          speaker=speaker, game=game)
+                stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg = eval_loop(dset.val_generator(1000),
+                                                                             listener=listener,
+                                                                             speaker=speaker, game=game)
                 writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
                 writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
+                writer.add_image('l_conf_mat_gr_msg', l_conf_mat_gr_msg.unsqueeze(0), step)
 
                 if args.save_vocab_change is not None:
                     vocab_change_data['speak'].append(s_conf_mat)
                     vocab_change_data['listen'].append(l_conf_mat)
+                    vocab_change_data['listen_gr'].append(l_conf_mat_gr_msg)
                 stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
                 stats['temp'] = temperature
                 logstr = ["step {}:".format(step)]
