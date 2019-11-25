@@ -159,6 +159,8 @@ def eval_speaker_loop(val_generator, speaker):
     tf_corrects = 0
     gr_corrects = 0
     total = 0
+    vocab_size = speaker.env_config['p'] * speaker.env_config['t']
+    s_conf_mat = torch.zeros([vocab_size, vocab_size])
     for objs, msgs in val_generator:
         with torch.no_grad():
             logits = speaker.get_logits(objs=objs, msgs=msgs)
@@ -168,8 +170,12 @@ def eval_speaker_loop(val_generator, speaker):
             gr_msgs = speaker.greedy(objs)
             gr_corrects += (gr_msgs == msgs).float().sum().item()
             total += msgs.numel()
+
+            s_logits = speaker.get_logits(objs=objs, msgs=msgs)
+            s_probs = softmax(s_logits, dim=-1)
+            increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
     return {'speak/tf_acc': tf_corrects / total,
-            'speak/gr_acc': gr_corrects / total}
+            'speak/gr_acc': gr_corrects / total}, s_conf_mat
 
 
 def eval_listener_loop(val_generator, listener):

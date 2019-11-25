@@ -114,8 +114,8 @@ def train_speaker_until(acc, speaker, dset):
                 train_speaker_batch(speaker, s_opt, objs, msgs)
                 step += 1
                 if step % LOG_STEPS == 0:
-                    stats = eval_speaker_loop(dset.val_generator(VAL_BATCH_SIZE),
-                                              speaker=speaker)
+                    stats, _ = eval_speaker_loop(dset.val_generator(VAL_BATCH_SIZE),
+                                                 speaker=speaker)
                     logstr = ["step {}:".format(step)]
                     for name, val in stats.items():
                         logstr.append("{}: {:.4f}".format(name, val))

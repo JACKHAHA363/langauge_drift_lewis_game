@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import io
 from shutil import rmtree
 from tensorboardX import SummaryWriter
-from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
+from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc, eval_speaker_loop
 from drift.gumbel import selfplay_batch
 from drift.a2c import selfplay_batch_a2c
 from drift.pretrain import imitate_listener_batch, imitate_speak_batch
@@ -220,8 +220,8 @@ def iteration_selfplay(args):
 
                 print('Start transmission')
                 # Randomly pick some word for initialization
-                _, student_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
-                _, teacher_s_conf_mat, _ = eval_loop(dset.val_generator(1000), teacher_listener, teacher_speaker, game)
+                _, student_s_conf_mat = eval_speaker_loop(dset.val_generator(1000), speaker)
+                _, teacher_s_conf_mat = eval_speaker_loop(dset.val_generator(1000), teacher_speaker)
                 if args.s_transmission_steps >= 0:
                     speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
                                     max_steps=args.s_transmission_steps, temperature=args.distill_temperature,
@@ -239,7 +239,7 @@ def iteration_selfplay(args):
                 else:
                     listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
                                      max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
-                _, final_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
+                _, final_s_conf_mat = eval_speaker_loop(dset.val_generator(1000), speaker)
 
                 img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
                                           student_s_conf_mat=student_s_conf_mat,
