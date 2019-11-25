@@ -258,9 +258,12 @@ def eval_loop(val_generator, listener, speaker, game):
 
     s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
     l_conf_mat /= (1e-32 + torch.sum(l_conf_mat, -1, keepdim=True))
-    return {'listen/acc': l_corrects / l_total,
-            'speak/tf_acc': s_tf_corrects / s_total, 'speak/gr_acc': s_gr_corrects / s_total,
-            'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch }, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg
+    stats = {'listen/acc_s_msg': (l_conf_mat_gr_msg.diag().sum() / l_conf_mat_gr_msg.sum()).item()}
+    l_conf_mat_gr_msg /= (1e-32 + torch.sum(l_conf_mat_gr_msg, -1, keepdim=True))
+    stats.update({'listen/acc': l_corrects / l_total, 'speak/tf_acc': s_tf_corrects / s_total,
+                  'speak/gr_acc': s_gr_corrects / s_total,
+                  'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch})
+    return stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg
 
 
 class Dataset:
