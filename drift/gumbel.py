@@ -3,7 +3,7 @@ import torch
 from torch.distributions import Categorical
 import torch.nn.functional as F
 
-BATCH_SIZE = 50
+BATCH_SIZE = 500
 
 
 def selfplay_batch(game, gumbel_temperature, l_opt, listener, s_opt, speaker):

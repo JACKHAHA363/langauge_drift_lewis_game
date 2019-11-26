@@ -325,7 +325,10 @@ def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teache
 
 if __name__ == '__main__':
     args = get_args()
-    print('Train with:', args.method)
+    print('########## Config ###############')
+    for key, val in args.__dict__.items():
+        print('{}: {}'.format(key, val))
+    print('#################################')
     if args.seed is not None:
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
