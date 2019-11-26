@@ -30,6 +30,8 @@ def get_args():
     parser.add_argument('-distill_temperature', type=float, default=0, help='If 0 fit with argmax, else use '
                                                                             'soft label with that temperature')
     parser.add_argument('-sequential', action='store_true', help='Use sequential distillation')
+    parser.add_argument('-student_ctx', action='store', help='Whether or not to use student as context '
+                                                             'during speaker recurrent distillation')
     parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
                                                                           'of that steps before')
     parser.add_argument('-s_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
@@ -130,7 +132,7 @@ def listener_imitate(game, student_listener, teacher_listener, max_steps, temper
 
 
 def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperature=0., with_eval=False,
-                    use_sample=False):
+                    use_sample=False, student_ctx=True):
     s_opt = torch.optim.Adam(lr=1e-4, params=student_speaker.parameters())
     dset = Dataset(game=game, train_size=1)
     step = 0
@@ -142,7 +144,7 @@ def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperatu
 
             # Generate batch with teacher listener
             objs = game.get_random_objs(50)
-            imitate_speak_batch(student_speaker, teacher_speaker, s_opt, objs, temperature, use_sample)
+            imitate_speak_batch(student_speaker, teacher_speaker, s_opt, objs, temperature, use_sample, student_ctx)
             step += 1
 
             # Evaluation
@@ -225,7 +227,7 @@ def iteration_selfplay(args):
                 if args.s_transmission_steps >= 0:
                     speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
                                     max_steps=args.s_transmission_steps, temperature=args.distill_temperature,
-                                    use_sample=args.s_use_sample)
+                                    use_sample=args.s_use_sample, student_ctx=args.student_ctx)
 
                 # Distill using distilled speaker msg
                 if args.sequential:

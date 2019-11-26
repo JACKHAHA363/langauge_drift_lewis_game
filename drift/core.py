@@ -174,6 +174,7 @@ def eval_speaker_loop(val_generator, speaker):
             s_logits = speaker.get_logits(objs=objs, msgs=msgs)
             s_probs = softmax(s_logits, dim=-1)
             increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
+    s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
     return {'speak/tf_acc': tf_corrects / total,
             'speak/gr_acc': gr_corrects / total}, s_conf_mat
 
