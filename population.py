@@ -103,10 +103,12 @@ def population_selfplay(args):
             if step % LOG_STEPS == 0:
                 speaker.train(False)
                 listener.train(False)
-                stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
-                                                          speaker=speaker, game=game)
+                stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg = eval_loop(dset.val_generator(1000),
+                                                                             listener=listener,
+                                                                             speaker=speaker, game=game)
                 writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
                 writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
+                writer.add_image('l_conf_mat_gr_msg', l_conf_mat_gr_msg.unsqueeze(0), step)
 
                 if args.save_vocab_change is not None:
                     vocab_change_data['speak'].append(s_conf_mat)

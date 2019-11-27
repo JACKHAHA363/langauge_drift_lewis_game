@@ -159,6 +159,8 @@ def eval_speaker_loop(val_generator, speaker):
     tf_corrects = 0
     gr_corrects = 0
     total = 0
+    vocab_size = speaker.env_config['p'] * speaker.env_config['t']
+    s_conf_mat = torch.zeros([vocab_size, vocab_size])
     for objs, msgs in val_generator:
         with torch.no_grad():
             logits = speaker.get_logits(objs=objs, msgs=msgs)
@@ -168,8 +170,13 @@ def eval_speaker_loop(val_generator, speaker):
             gr_msgs = speaker.greedy(objs)
             gr_corrects += (gr_msgs == msgs).float().sum().item()
             total += msgs.numel()
+
+            s_logits = speaker.get_logits(objs=objs, msgs=msgs)
+            s_probs = softmax(s_logits, dim=-1)
+            increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
+    s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
     return {'speak/tf_acc': tf_corrects / total,
-            'speak/gr_acc': gr_corrects / total}
+            'speak/gr_acc': gr_corrects / total}, s_conf_mat
 
 
 def eval_listener_loop(val_generator, listener):
@@ -215,17 +222,21 @@ def eval_loop(val_generator, listener, speaker, game):
     vocab_size = listener.env_config['p'] * listener.env_config['t']
     s_conf_mat = torch.zeros([vocab_size, vocab_size])
     l_conf_mat = torch.zeros([vocab_size, vocab_size])
+    l_conf_mat_gr_msg = torch.zeros([vocab_size, vocab_size])
     if USE_GPU:
         s_conf_mat = s_conf_mat.cuda()
         l_conf_mat = l_conf_mat.cuda()
     for objs, msgs in val_generator:
         with torch.no_grad():
+            # Listener stats on correct message
             l_logits = listener.get_logits(listener.one_hot(msgs))
             l_pred = torch.argmax(l_logits, dim=-1)
             l_probs = softmax(l_logits, dim=-1)
+            increment_2d_matrix(l_conf_mat, msgs.view(-1), _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
             l_corrects += (l_pred == objs).float().sum().item()
             l_total += objs.numel()
 
+            # Speaker stats
             s_logits = speaker.get_logits(objs=objs, msgs=msgs)
             s_pred = torch.argmax(s_logits, dim=-1)
             s_probs = softmax(s_logits, dim=-1)
@@ -234,9 +245,12 @@ def eval_loop(val_generator, listener, speaker, game):
             gr_msgs = speaker.greedy(objs=objs)
             s_gr_corrects += (gr_msgs == msgs).float().sum().item()
             s_total += msgs.numel()
-
             increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
-            increment_2d_matrix(l_conf_mat, msgs.view(-1), _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
+
+            # Listener stats on speaker msg
+            l_logits = listener.get_logits(listener.one_hot(gr_msgs))
+            l_probs = softmax(l_logits, dim=-1)
+            increment_2d_matrix(l_conf_mat_gr_msg, gr_msgs.view(-1), _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
 
             # Entropy
             l_ent += -(l_probs * torch.log(l_probs + 1e-32)).mean().item()
@@ -245,9 +259,12 @@ def eval_loop(val_generator, listener, speaker, game):
 
     s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
     l_conf_mat /= (1e-32 + torch.sum(l_conf_mat, -1, keepdim=True))
-    return {'listen/acc': l_corrects / l_total,
-            'speak/tf_acc': s_tf_corrects / s_total, 'speak/gr_acc': s_gr_corrects / s_total,
-            'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch }, s_conf_mat, l_conf_mat
+    stats = {'listen/acc_s_msg': (l_conf_mat_gr_msg.diag().sum() / l_conf_mat_gr_msg.sum()).item()}
+    l_conf_mat_gr_msg /= (1e-32 + torch.sum(l_conf_mat_gr_msg, -1, keepdim=True))
+    stats.update({'listen/acc': l_corrects / l_total, 'speak/tf_acc': s_tf_corrects / s_total,
+                  'speak/gr_acc': s_gr_corrects / s_total,
+                  'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch})
+    return stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg
 
 
 class Dataset:

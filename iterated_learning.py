@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import io
 from shutil import rmtree
 from tensorboardX import SummaryWriter
-from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
+from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc, eval_speaker_loop
 from drift.gumbel import selfplay_batch
 from drift.a2c import selfplay_batch_a2c
 from drift.pretrain import imitate_listener_batch, imitate_speak_batch
@@ -30,6 +30,8 @@ def get_args():
     parser.add_argument('-distill_temperature', type=float, default=0, help='If 0 fit with argmax, else use '
                                                                             'soft label with that temperature')
     parser.add_argument('-sequential', action='store_true', help='Use sequential distillation')
+    parser.add_argument('-student_ctx', action='store', help='Whether or not to use student as context '
+                                                             'during speaker recurrent distillation')
     parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
                                                                           'of that steps before')
     parser.add_argument('-s_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
@@ -38,6 +40,8 @@ def get_args():
     parser.add_argument('-l_transmission_steps', type=int, default=1500, help='number of steps to transmit signal '
                                                                               'for listener.'
                                                                               'If negative -1, no transmission')
+    parser.add_argument('-s_use_sample', action='store_true')
+
     parser.add_argument('-logdir', required=True, help='path to tb log')
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
@@ -127,7 +131,8 @@ def listener_imitate(game, student_listener, teacher_listener, max_steps, temper
     return accs
 
 
-def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperature=0., with_eval=False):
+def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperature=0., with_eval=False,
+                    use_sample=False, student_ctx=True):
     s_opt = torch.optim.Adam(lr=1e-4, params=student_speaker.parameters())
     dset = Dataset(game=game, train_size=1)
     step = 0
@@ -139,7 +144,7 @@ def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperatu
 
             # Generate batch with teacher listener
             objs = game.get_random_objs(50)
-            imitate_speak_batch(student_speaker, teacher_speaker, s_opt, objs, temperature)
+            imitate_speak_batch(student_speaker, teacher_speaker, s_opt, objs, temperature, use_sample, student_ctx)
             step += 1
 
             # Evaluation
@@ -189,7 +194,7 @@ def iteration_selfplay(args):
 
     # Training
     temperature = args.temperature
-    vocab_change_data = {'speak': [], 'listen': []}
+    vocab_change_data = {'speak': [], 'listen': [], 'listen_gr': []}
     try:
         for step in range(args.steps):
             # Train for a Batch
@@ -217,11 +222,12 @@ def iteration_selfplay(args):
 
                 print('Start transmission')
                 # Randomly pick some word for initialization
-                _, student_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
-                _, teacher_s_conf_mat, _ = eval_loop(dset.val_generator(1000), teacher_listener, teacher_speaker, game)
+                _, student_s_conf_mat = eval_speaker_loop(dset.val_generator(1000), speaker)
+                _, teacher_s_conf_mat = eval_speaker_loop(dset.val_generator(1000), teacher_speaker)
                 if args.s_transmission_steps >= 0:
                     speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
-                                    max_steps=args.s_transmission_steps, temperature=args.distill_temperature)
+                                    max_steps=args.s_transmission_steps, temperature=args.distill_temperature,
+                                    use_sample=args.s_use_sample, student_ctx=args.student_ctx)
 
                 # Distill using distilled speaker msg
                 if args.sequential:
@@ -235,7 +241,7 @@ def iteration_selfplay(args):
                 else:
                     listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
                                      max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
-                _, final_s_conf_mat, _ = eval_loop(dset.val_generator(1000), listener, speaker, game)
+                _, final_s_conf_mat = eval_speaker_loop(dset.val_generator(1000), speaker)
 
                 img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
                                           student_s_conf_mat=student_s_conf_mat,
@@ -252,14 +258,17 @@ def iteration_selfplay(args):
             if step % LOG_STEPS == 0:
                 speaker.train(False)
                 listener.train(False)
-                stats, s_conf_mat, l_conf_mat = eval_loop(dset.val_generator(1000), listener=listener,
-                                                          speaker=speaker, game=game)
+                stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg = eval_loop(dset.val_generator(1000),
+                                                                             listener=listener,
+                                                                             speaker=speaker, game=game)
                 writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
                 writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
+                writer.add_image('l_conf_mat_gr_msg', l_conf_mat_gr_msg.unsqueeze(0), step)
 
                 if args.save_vocab_change is not None:
                     vocab_change_data['speak'].append(s_conf_mat)
                     vocab_change_data['listen'].append(l_conf_mat)
+                    vocab_change_data['listen_gr'].append(l_conf_mat_gr_msg)
                 stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
                 stats['temp'] = temperature
                 logstr = ["step {}:".format(step)]
@@ -316,7 +325,10 @@ def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat, teache
 
 if __name__ == '__main__':
     args = get_args()
-    print('Train with:', args.method)
+    print('########## Config ###############')
+    for key, val in args.__dict__.items():
+        print('{}: {}'.format(key, val))
+    print('#################################')
     if args.seed is not None:
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
