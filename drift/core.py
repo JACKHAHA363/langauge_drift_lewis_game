@@ -3,62 +3,8 @@ Lewis Signal Game
 """
 import torch
 from torch.nn.functional import softmax
-from itertools import product
-from drift import USE_GPU, EVALUATION_RATIO
+from drift import USE_GPU
 from drift.utils import timeit
-import numpy as np
-import argparse
-
-
-class LewisGame:
-    fields = [('p', int, 6, 'nb properties'),
-              ('t', int, 10, 'nb types')]
-
-    @staticmethod
-    def get_parser(parser=None):
-        if parser is None:
-            parser = argparse.ArgumentParser()
-        for name, dtype, val, desc in LewisGame.fields:
-            parser.add_argument('-' + name, default=val, type=dtype, help=desc)
-        return parser
-
-    @classmethod
-    def get_default_config(cls):
-        return {name: default for name, _, default, _ in cls.fields}
-
-    def __init__(self, p, t):
-        print('Building a game with p: {}, t: {}'.format(p, t))
-        self.p = p
-        self.t = t
-        self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])
-
-        # The offset vector of converting to msg
-        self.msg_offset = np.arange(0, self.p) * self.t
-        #np.random.shuffle(self.msg_offset)
-        self.msg_offset = torch.Tensor(self.msg_offset).long()
-        self.all_msgs = self.objs_to_msg(self.all_objs)
-
-        # Move to GPU
-        if USE_GPU:
-            self.all_objs = self.all_objs.cuda()
-            self.all_msgs = self.all_msgs.cuda()
-            self.msg_offset = self.msg_offset.cuda()
-
-    def get_random_objs(self, batch_size):
-        indices = torch.randint(len(self.all_objs), size=[batch_size]).long()
-        return self.all_objs[indices]
-
-    @property
-    def vocab_size(self):
-        return self.t * self.p
-
-    def objs_to_msg(self, objs):
-        """ Generate the ground truth language for objects
-        :param [bsz, nb_props]
-        :return [bsz, nb_props]
-        """
-        return objs + self.msg_offset.unsqueeze(0)
-
 
 class Agent(torch.nn.Module):
     def __init__(self, env_config):
@@ -265,58 +211,6 @@ def eval_loop(val_generator, listener, speaker, game):
                   'speak/gr_acc': s_gr_corrects / s_total,
                   'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch})
     return stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg
-
-
-class Dataset:
-    """ The dataset object """
-
-    def __init__(self, game, train_size):
-        assert isinstance(game, LewisGame)
-        self.train_objs = game.get_random_objs(train_size)
-        self.train_msgs = game.objs_to_msg(self.train_objs)
-        self.game = game
-
-        # Shuffle all objects index
-        self.all_indices = [i for i in range(len(game.all_objs))]
-        np.random.shuffle(self.all_indices)
-        self.train_inds = self.all_indices[:train_size].copy()
-
-        # Reshuffle all indice to get valid objects
-        np.random.shuffle(self.all_indices)
-        self.valid_start = 0
-
-    def train_generator(self, batch_size):
-        return self._get_generator(self.game.all_objs[self.train_inds],
-                                   self.game.all_msgs[self.train_inds],
-                                   batch_size)
-
-    def val_generator(self, batch_size):
-        """ Used for evaluation. For each validation loop, randomly pick EVALUATION_RATIO * total_objects
-        """
-        split = int(EVALUATION_RATIO * len(self.all_indices))
-        valid_ids = self.all_indices[self.valid_start: self.valid_start + split]
-        self.valid_start += split
-
-        # Reset valid_start if exceeding limit and reshuffle ids
-        if self.valid_start >= len(self.all_indices):
-            self.valid_start = 0
-            np.random.shuffle(self.all_indices)
-
-        # Take the validation data
-        objs = self.game.all_objs[valid_ids]
-        msgs = self.game.all_msgs[valid_ids]
-        return self._get_generator(objs, msgs, batch_size)
-
-    @staticmethod
-    def _get_generator(objs, msgs, batch_size):
-        start = 0
-        while start < len(objs):
-            batch_objs, batch_msgs = objs[start: start + batch_size], msgs[start: start + batch_size]
-            if USE_GPU:
-                batch_objs = batch_objs.cuda()
-                batch_msgs = batch_msgs.cuda()
-            yield batch_objs, batch_msgs
-            start += batch_size
 
 
 def increment_2d_matrix(mat, row_id, row_updates):
