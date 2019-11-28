@@ -9,8 +9,8 @@ import numpy as np
 class LewisGame:
     fields = [('p', int, 6, 'nb properties'),
               ('t', int, 10, 'nb types'),
-              ('su_ratio', 0.05, 'ratio of objects being labeled for supervise'),
-              ('sp_ratio', 0.1, 'ratio of objects using selfplay. Must be >= su_ratio ')]
+              ('su_ratio', float, 0.05, 'ratio of objects being labeled for supervise'),
+              ('sp_ratio', float, 0.1, 'ratio of objects using selfplay. Must be >= su_ratio ')]
 
     @staticmethod
     def get_parser(parser=None):
@@ -106,6 +106,10 @@ class LewisGame:
                 batch_msgs = batch_msgs.cuda()
             yield batch_objs, batch_msgs
             start += batch_size
+
+    @property
+    def env_config(self):
+        return {'p': self.p, 't': self.t}
 
 
 if __name__ == '__main__':

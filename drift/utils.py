@@ -45,3 +45,10 @@ def increment_2d_matrix(mat, row_id, row_updates):
     indices = indices.view(-1)
 
     mat.put_(indices, row_updates.view(-1), accumulate=True)
+
+
+def combine_generator(generator_lists):
+    """ Return a generator that will go through the list of generators """
+    for gen in generator_lists:
+        for stuff in gen:
+            yield stuff

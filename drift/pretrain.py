@@ -1,6 +1,7 @@
 import torch
 from torch.distributions import Categorical
 from drift.core import eval_listener_loop, eval_speaker_loop
+from drift.utils import combine_generator
 import numpy as np
 
 VAL_BATCH_SIZE = 1000
@@ -43,6 +44,7 @@ class EarlyStopper:
 
 def train_speaker_until(acc, speaker, game):
     """ Return a speaker trained until desired acc. If speaker is None construct a default one.
+        Acc is evaluate on sp + val
     """
     s_opt = torch.optim.Adam(lr=1e-4, params=speaker.parameters())
 
@@ -62,7 +64,9 @@ def train_speaker_until(acc, speaker, game):
                 train_speaker_batch(speaker, s_opt, objs, msgs)
                 step += 1
                 if step % LOG_STEPS == 0:
-                    stats, _ = eval_speaker_loop(game._generator(VAL_BATCH_SIZE),
+                    generator = combine_generator([game.sp_generator(VAL_BATCH_SIZE),
+                                                   game.heldout_generator(VAL_BATCH_SIZE)])
+                    stats, _ = eval_speaker_loop(generator=generator,
                                                  speaker=speaker)
                     logstr = ["step {}:".format(step)]
                     for name, val in stats.items():
@@ -76,7 +80,7 @@ def train_speaker_until(acc, speaker, game):
     return speaker, stats
 
 
-def train_listener_until(acc, listener, dset):
+def train_listener_until(acc, listener, game):
     """ Train listener until desired acc """
     l_opt = torch.optim.Adam(lr=5e-4, params=listener.parameters())
 
@@ -89,19 +93,21 @@ def train_listener_until(acc, listener, dset):
             if should_stop:
                 break
 
-            for objs, msgs in dset.train_generator(5):
+            for objs, msgs in game.su_generator(5):
                 if step >= MAX_STEPS:
                     should_stop = True
                     break
                 train_listener_batch(listener, l_opt, objs, msgs)
                 step += 1
-                stats, _ = eval_listener_loop(dset.val_generator(VAL_BATCH_SIZE),
+                generator = combine_generator([game.sp_generator(VAL_BATCH_SIZE),
+                                               game.heldout_generator(VAL_BATCH_SIZE)])
+                stats, _ = eval_listener_loop(generator=generator,
                                               listener=listener)
                 logstr = ["step {}:".format(step)]
                 for name, val in stats.items():
                     logstr.append("{}: {:.4f}".format(name, val))
                 print(' '.join(logstr))
-                if stats['l_acc'] >= acc:
+                if stats['listen/acc'] >= acc:
                     should_stop = True
                     break
     except KeyboardInterrupt:

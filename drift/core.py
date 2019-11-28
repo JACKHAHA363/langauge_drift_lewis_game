@@ -4,7 +4,7 @@ Lewis Signal Game
 import torch
 from torch.nn.functional import softmax
 from drift import USE_GPU
-from drift.utils import timeit, _obj_prob_to_msg_prob, increment_2d_matrix
+from drift.utils import _obj_prob_to_msg_prob, increment_2d_matrix
 
 
 class Agent(torch.nn.Module):
@@ -90,7 +90,6 @@ class BaseListener(Agent):
 """
 Evaluation Utils
 """
-@timeit('get_comm_acc')
 def get_comm_acc(generator, listener, speaker):
     """ Return the communication accuracy on give generator """
     corrects = 0
@@ -117,7 +116,6 @@ def get_comm_acc(generator, listener, speaker):
     return {'comm_acc': corrects / total, 'listen/acc_gr_msg': acc_gr_msg}, l_conf_mat_gr_msg
 
 
-@timeit('eval speaker loop')
 def eval_speaker_loop(generator, speaker):
     """ Return stats and conf matrix """
     tf_corrects = 0
@@ -154,7 +152,6 @@ def eval_speaker_loop(generator, speaker):
             'speak/ent': ent / nb_batch}, conf_mat
 
 
-@timeit('eval listener loop')
 def eval_listener_loop(generator, listener):
     """ Return stats and conf mat """
     corrects = 0
