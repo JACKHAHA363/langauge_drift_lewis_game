@@ -2,6 +2,7 @@
 import argparse
 import torch
 from drift import USE_GPU, EVALUATION_RATIO
+from drift.utils import combine_generator
 from itertools import product
 import numpy as np
 
@@ -72,19 +73,41 @@ class LewisGame:
         """
         return objs + self.msg_offset.unsqueeze(0)
 
-    def su_generator(self, batch_size):
+    @property
+    def env_config(self):
+        return {'p': self.p, 't': self.t}
+
+    def get_generator(self, batch_size, names):
+        """
+        :param batch_size: Batch size
+        :param names: A list of name of generator. From 'su', 'sp', 'heldout'
+        """
+        names = set(names)
+        gen_list = []
+        for name in names:
+            if name == 'su':
+                gen_list.append(self._su_generator(batch_size))
+            elif name == 'sp':
+                gen_list.append(self._sp_generator(batch_size))
+            elif name == 'heldout':
+                gen_list.append(self._heldout_generator(batch_size))
+            else:
+                raise ValueError('Incorrect generator name {}'.format(names))
+        return combine_generator(gen_list)
+
+    def _su_generator(self, batch_size):
         np.random.shuffle(self.su_indices)
-        return self._get_generator(self.all_objs[self.su_indices],
-                                   self.all_msgs[self.su_indices],
-                                   batch_size)
+        return self.create_generator(self.all_objs[self.su_indices],
+                                     self.all_msgs[self.su_indices],
+                                     batch_size)
 
-    def sp_generator(self, batch_size):
+    def _sp_generator(self, batch_size):
         np.random.shuffle(self.sp_indices)
-        return self._get_generator(self.all_objs[self.sp_indices],
-                                   self.all_msgs[self.sp_indices],
-                                   batch_size)
+        return self.create_generator(self.all_objs[self.sp_indices],
+                                     self.all_msgs[self.sp_indices],
+                                     batch_size)
 
-    def heldout_generator(self, batch_size):
+    def _heldout_generator(self, batch_size):
         """ Used for evaluation. For each validation loop, randomly pick EVALUATION_RATIO * heldout_objects
         """
         split = int(EVALUATION_RATIO * len(self.heldout_indices))
@@ -94,10 +117,10 @@ class LewisGame:
         # Take the validation data
         objs = self.all_objs[final_ids]
         msgs = self.all_msgs[final_ids]
-        return self._get_generator(objs, msgs, batch_size)
+        return self.create_generator(objs, msgs, batch_size)
 
     @staticmethod
-    def _get_generator(objs, msgs, batch_size):
+    def create_generator(objs, msgs, batch_size):
         start = 0
         while start < objs.shape[0]:
             batch_objs, batch_msgs = objs[start: start + batch_size], msgs[start: start + batch_size]
@@ -106,10 +129,6 @@ class LewisGame:
                 batch_msgs = batch_msgs.cuda()
             yield batch_objs, batch_msgs
             start += batch_size
-
-    @property
-    def env_config(self):
-        return {'p': self.p, 't': self.t}
 
 
 if __name__ == '__main__':

@@ -1,7 +1,6 @@
 import torch
 from torch.distributions import Categorical
 from drift.core import eval_listener_loop, eval_speaker_loop
-from drift.utils import combine_generator
 import numpy as np
 
 VAL_BATCH_SIZE = 1000
@@ -64,8 +63,7 @@ def train_speaker_until(acc, speaker, game):
                 train_speaker_batch(speaker, s_opt, objs, msgs)
                 step += 1
                 if step % LOG_STEPS == 0:
-                    generator = combine_generator([game.sp_generator(VAL_BATCH_SIZE),
-                                                   game.heldout_generator(VAL_BATCH_SIZE)])
+                    generator = game.get_generator(names=['sp', 'heldout'], batch_size=VAL_BATCH_SIZE)
                     stats, _ = eval_speaker_loop(generator=generator,
                                                  speaker=speaker)
                     logstr = ["step {}:".format(step)]
@@ -99,8 +97,7 @@ def train_listener_until(acc, listener, game):
                     break
                 train_listener_batch(listener, l_opt, objs, msgs)
                 step += 1
-                generator = combine_generator([game.sp_generator(VAL_BATCH_SIZE),
-                                               game.heldout_generator(VAL_BATCH_SIZE)])
+                generator = game.get_generator(names=['sp', 'heldout'], batch_size=VAL_BATCH_SIZE)
                 stats, _ = eval_listener_loop(generator=generator,
                                               listener=listener)
                 logstr = ["step {}:".format(step)]

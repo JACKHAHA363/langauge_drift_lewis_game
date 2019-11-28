@@ -90,7 +90,7 @@ class BaseListener(Agent):
 """
 Evaluation Utils
 """
-def get_comm_acc(generator, listener, speaker):
+def eval_comm_loop(generator, listener, speaker):
     """ Return the communication accuracy on give generator """
     corrects = 0
     total = 0
