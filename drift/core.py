@@ -4,7 +4,8 @@ Lewis Signal Game
 import torch
 from torch.nn.functional import softmax
 from drift import USE_GPU
-from drift.utils import timeit
+from drift.utils import timeit, _obj_prob_to_msg_prob, increment_2d_matrix
+
 
 class Agent(torch.nn.Module):
     def __init__(self, env_config):
@@ -86,143 +87,93 @@ class BaseListener(Agent):
         return oh_msgs
 
 
+"""
+Evaluation Utils
+"""
 @timeit('get_comm_acc')
-def get_comm_acc(val_generator, listener, speaker):
+def get_comm_acc(generator, listener, speaker):
+    """ Return the communication accuracy on give generator """
     corrects = 0
     total = 0
-    for objs, _ in val_generator:
+    vocab_size = listener.env_config['p'] * listener.env_config['t']
+    l_conf_mat_gr_msg = torch.zeros([vocab_size, vocab_size])
+    if USE_GPU:
+        l_conf_mat_gr_msg = l_conf_mat_gr_msg.cuda()
+    for objs, _ in generator:
         with torch.no_grad():
-            msgs = speaker.greedy(objs)
-            l_logits = listener.get_logits(listener.one_hot(msgs))
+            # Communicate
+            gr_msgs = speaker.greedy(objs)
+            l_logits = listener.get_logits(listener.one_hot(gr_msgs))
             preds = torch.argmax(l_logits, dim=-1)
             corrects += (preds == objs).float().sum().item()
             total += objs.numel()
-    return {'comm_acc': corrects / total}
+
+            # Listener acc on speaker msg
+            l_probs = softmax(l_logits, dim=-1)
+            increment_2d_matrix(l_conf_mat_gr_msg, gr_msgs.view(-1),
+                                _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
+    acc_gr_msg = (l_conf_mat_gr_msg.diag().sum() / l_conf_mat_gr_msg.sum()).item()
+    l_conf_mat_gr_msg /= (1e-32 + torch.sum(l_conf_mat_gr_msg, -1, keepdim=True))
+    return {'comm_acc': corrects / total, 'listen/acc_gr_msg': acc_gr_msg}, l_conf_mat_gr_msg
 
 
-def eval_speaker_loop(val_generator, speaker):
-    """ Return stats """
+@timeit('eval speaker loop')
+def eval_speaker_loop(generator, speaker):
+    """ Return stats and conf matrix """
     tf_corrects = 0
     gr_corrects = 0
     total = 0
+    ent = 0
+    nb_batch = 0
     vocab_size = speaker.env_config['p'] * speaker.env_config['t']
-    s_conf_mat = torch.zeros([vocab_size, vocab_size])
-    for objs, msgs in val_generator:
+    conf_mat = torch.zeros([vocab_size, vocab_size])
+    if USE_GPU:
+        conf_mat = conf_mat.cuda()
+
+    for objs, msgs in generator:
+        nb_batch += 1
+        total += msgs.numel()
+
         with torch.no_grad():
+            # Teacher Forcing
             logits = speaker.get_logits(objs=objs, msgs=msgs)
             pred = torch.argmax(logits, dim=-1)
             tf_corrects += (pred == msgs).float().sum().item()
 
-            gr_msgs = speaker.greedy(objs)
-            gr_corrects += (gr_msgs == msgs).float().sum().item()
-            total += msgs.numel()
-
-            s_logits = speaker.get_logits(objs=objs, msgs=msgs)
-            s_probs = softmax(s_logits, dim=-1)
-            increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
-    s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
-    return {'speak/tf_acc': tf_corrects / total,
-            'speak/gr_acc': gr_corrects / total}, s_conf_mat
-
-
-def eval_listener_loop(val_generator, listener):
-    l_corrects = 0
-    l_total = 0
-    for objs, msgs in val_generator:
-        with torch.no_grad():
-            l_logits = listener.get_logits(listener.one_hot(msgs))
-            l_pred = torch.argmax(l_logits, dim=-1)
-            l_corrects += (l_pred == objs).float().sum().item()
-            l_total += objs.numel()
-    return {'l_acc': l_corrects / l_total}
-
-
-def _obj_prob_to_msg_prob(obj_probs):
-    """
-    :param obj_probs: [nb_obj, nb_type, nb_value]
-    :return: [nb_obj, nb_type, nb_type * nb_value]
-    """
-    nb_obj, nb_type, nb_value = obj_probs.shape[0], obj_probs.shape[1], obj_probs.shape[2]
-    result = torch.zeros([nb_obj, nb_type, nb_type * nb_value])
-    result = result.to(device=obj_probs.device)
-    for i in range(nb_type):
-        start = i * nb_value
-        end = (i+1) * nb_value
-        result[:, i, start:end] = obj_probs[:, i]
-    return result
-
-
-@timeit('eval_loop')
-def eval_loop(val_generator, listener, speaker, game):
-    """ Return accuracy as well as confusion matrix for symbols """
-    l_corrects = 0
-    l_total = 0
-    s_tf_corrects = 0
-    s_gr_corrects = 0
-    s_total = 0
-    l_ent = 0
-    s_ent = 0
-    nb_batch = 0
-
-    # Add speaker confusion matrix
-    vocab_size = listener.env_config['p'] * listener.env_config['t']
-    s_conf_mat = torch.zeros([vocab_size, vocab_size])
-    l_conf_mat = torch.zeros([vocab_size, vocab_size])
-    l_conf_mat_gr_msg = torch.zeros([vocab_size, vocab_size])
-    if USE_GPU:
-        s_conf_mat = s_conf_mat.cuda()
-        l_conf_mat = l_conf_mat.cuda()
-    for objs, msgs in val_generator:
-        with torch.no_grad():
-            # Listener stats on correct message
-            l_logits = listener.get_logits(listener.one_hot(msgs))
-            l_pred = torch.argmax(l_logits, dim=-1)
-            l_probs = softmax(l_logits, dim=-1)
-            increment_2d_matrix(l_conf_mat, msgs.view(-1), _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
-            l_corrects += (l_pred == objs).float().sum().item()
-            l_total += objs.numel()
-
-            # Speaker stats
-            s_logits = speaker.get_logits(objs=objs, msgs=msgs)
-            s_pred = torch.argmax(s_logits, dim=-1)
-            s_probs = softmax(s_logits, dim=-1)
-            s_tf_corrects += (s_pred == msgs).float().sum().item()
-
+            # Greedy
             gr_msgs = speaker.greedy(objs=objs)
-            s_gr_corrects += (gr_msgs == msgs).float().sum().item()
-            s_total += msgs.numel()
-            increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
+            gr_corrects += (gr_msgs == msgs).float().sum().item()
+            gr_logits = speaker.get_logits(objs=objs, msgs=gr_msgs)
+            gr_probs = softmax(gr_logits, dim=-1)
+            increment_2d_matrix(conf_mat, msgs.view(-1), gr_probs.view(-1, vocab_size))
+            ent += -(gr_probs * torch.log(gr_probs + 1e-32)).mean().item()
 
-            # Listener stats on speaker msg
-            l_logits = listener.get_logits(listener.one_hot(gr_msgs))
-            l_probs = softmax(l_logits, dim=-1)
-            increment_2d_matrix(l_conf_mat_gr_msg, gr_msgs.view(-1), _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
-
-            # Entropy
-            l_ent += -(l_probs * torch.log(l_probs + 1e-32)).mean().item()
-            s_ent += -(s_probs * torch.log(s_probs + 1e-32)).mean().item()
-            nb_batch += 1
-
-    s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
-    l_conf_mat /= (1e-32 + torch.sum(l_conf_mat, -1, keepdim=True))
-    stats = {'listen/acc_s_msg': (l_conf_mat_gr_msg.diag().sum() / l_conf_mat_gr_msg.sum()).item()}
-    l_conf_mat_gr_msg /= (1e-32 + torch.sum(l_conf_mat_gr_msg, -1, keepdim=True))
-    stats.update({'listen/acc': l_corrects / l_total, 'speak/tf_acc': s_tf_corrects / s_total,
-                  'speak/gr_acc': s_gr_corrects / s_total,
-                  'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch})
-    return stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg
+    conf_mat /= (1e-32 + torch.sum(conf_mat, -1, keepdim=True))
+    return {'speak/tf_acc': tf_corrects / total,
+            'speak/gr_acc': gr_corrects / total,
+            'speak/ent': ent / nb_batch}, conf_mat
 
 
-def increment_2d_matrix(mat, row_id, row_updates):
-    """
-    :param row_id: [nb_indices]
-    :param row_updates: [nb_indices, nb_col]
-    """
-    nb_row, nb_col = mat.shape
+@timeit('eval listener loop')
+def eval_listener_loop(generator, listener):
+    """ Return stats and conf mat """
+    corrects = 0
+    total = 0
+    ent = 0
+    nb_batch = 0
+    vocab_size = listener.env_config['p'] * listener.env_config['t']
+    conf_mat = torch.zeros([vocab_size, vocab_size])
+    if USE_GPU:
+        conf_mat = conf_mat.cuda()
+    for objs, msgs in generator:
+        nb_batch += 1
+        total += objs.numel()
+        with torch.no_grad():
+            logits = listener.get_logits(listener.one_hot(msgs))
+            pred = torch.argmax(logits, dim=-1)
+            corrects += (pred == objs).float().sum().item()
 
-    # Build indices [nb_indices * nb_col]
-    col = torch.arange(0, nb_col)
-    indices = row_id[:, None] * nb_col + col[None, :]
-    indices = indices.view(-1)
-
-    mat.put_(indices, row_updates.view(-1), accumulate=True)
+            probs = softmax(logits, dim=-1)
+            increment_2d_matrix(conf_mat, msgs.view(-1), _obj_prob_to_msg_prob(probs).view([-1, vocab_size]))
+            ent += -(probs * torch.log(probs + 1e-32)).mean().item()
+    return {'listen/acc': corrects / total, 'listen/ent': ent / nb_batch}, conf_mat
