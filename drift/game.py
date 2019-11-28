@@ -27,10 +27,12 @@ class LewisGame:
 
     def __init__(self, p, t, su_ratio, sp_ratio, **kwargs):
         assert sp_ratio >= su_ratio
-        assert 0 < sp_ratio < 1 and 0 < su_ratio < 1
+        assert 0 < sp_ratio <= 1 and 0 < su_ratio <= 1
         print('Building a game with p: {}, t: {}'.format(p, t))
         self.p = p
         self.t = t
+        self.su_ratio = su_ratio
+        self.sp_ratio = sp_ratio
         self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])
 
         # The offset vector of converting to msg
@@ -111,13 +113,11 @@ class LewisGame:
         return combine_generator(gen_list)
 
     def _su_generator(self, batch_size):
-        np.random.shuffle(self.su_indices)
         return self.create_generator(self.all_objs[self.su_indices],
                                      self.all_msgs[self.su_indices],
                                      batch_size)
 
     def _sp_generator(self, batch_size):
-        np.random.shuffle(self.sp_indices)
         return self.create_generator(self.all_objs[self.sp_indices],
                                      self.all_msgs[self.sp_indices],
                                      batch_size)
@@ -126,7 +126,6 @@ class LewisGame:
         """ Used for evaluation. For each validation loop, randomly pick EVALUATION_RATIO * heldout_objects
         """
         split = int(EVALUATION_RATIO * len(self.heldout_indices))
-        np.random.shuffle(self.heldout_indices)
         final_ids = self.heldout_indices[:split]
 
         # Take the validation data
@@ -136,9 +135,13 @@ class LewisGame:
 
     @staticmethod
     def create_generator(objs, msgs, batch_size):
+        # Randomized
+        inds = [i for i in range(len(objs))]
+        np.random.shuffle(inds)
         start = 0
         while start < objs.shape[0]:
-            batch_objs, batch_msgs = objs[start: start + batch_size], msgs[start: start + batch_size]
+            batch_inds = inds[start: start + batch_size]
+            batch_objs, batch_msgs = objs[batch_inds], msgs[batch_inds]
             if USE_GPU:
                 batch_objs = batch_objs.cuda()
                 batch_msgs = batch_msgs.cuda()

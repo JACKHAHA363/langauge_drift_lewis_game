@@ -66,9 +66,9 @@ def listener_imitate(game, student_listener, teacher_listener, max_steps, temper
                 break
 
             # Generate the msg
-            objs = game.get_random_objs(50)
+            objs = game.random_sp_objs(50)
             if distilled_speaker is None:
-                msgs = game.objs_to_msg(game.get_random_objs(50))
+                msgs = game.objs_to_msg(game.random_sp_objs(50))
             else:
                 with torch.no_grad():
                     _, msgs = distilled_speaker.sample(objs)
@@ -91,7 +91,7 @@ def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperatu
                 break
 
             # Generate batch with teacher listener
-            objs = game.get_random_objs(50)
+            objs = game.random_sp_objs(50)
             imitate_speak_batch(student_speaker, teacher_speaker, s_opt, objs, temperature, use_sample, student_ctx)
             step += 1
 

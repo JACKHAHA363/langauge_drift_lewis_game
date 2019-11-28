@@ -34,12 +34,11 @@ def prepare_population(args):
     s_cls = get_speaker_cls(args.s_arch)
     l_cls = get_listener_cls(args.l_arch)
     game = LewisGame(**args.__dict__)
+    if not os.path.exists(args.ckpt_dir):
+        os.makedirs(args.ckpt_dir)
     if not args.switch_dset:
         with open(os.path.join(args.ckpt_dir, 'game.pth'), 'wb') as f:
             torch.save(game, f)
-
-    if not os.path.exists(args.ckpt_dir):
-        os.makedirs(args.ckpt_dir)
 
     for i in range(args.n):
         # Change dataset for each pair
