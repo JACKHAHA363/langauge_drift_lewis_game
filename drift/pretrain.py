@@ -56,7 +56,7 @@ def train_speaker_until(acc, speaker, game):
             if should_stop:
                 break
 
-            for objs, msgs in game.su_generator(5):
+            for objs, msgs in game.get_generator(5, names='su'):
                 if step >= MAX_STEPS:
                     should_stop = True
                     break
@@ -91,7 +91,7 @@ def train_listener_until(acc, listener, game):
             if should_stop:
                 break
 
-            for objs, msgs in game.su_generator(5):
+            for objs, msgs in game.get_generator(5, 'su'):
                 if step >= MAX_STEPS:
                     should_stop = True
                     break

@@ -48,14 +48,25 @@ class LewisGame:
         total_size = self.all_objs.shape[0]
         su_size = int(su_ratio * total_size)
         sp_size = int(sp_ratio * total_size)
-        print('We have total {} examples, {} for supervise and {} for selfplay'.format(total_size,
-                                                                                       su_size,
-                                                                                       sp_size))
         self.all_indices = [i for i in range(self.all_objs.shape[0])]
         np.random.shuffle(self.all_indices)
         self.sp_indices = self.all_indices[:sp_size].copy()
         self.su_indices = self.all_indices[:su_size].copy()
         self.heldout_indices = self.all_indices[sp_size:].copy()
+
+        self.all_indices = torch.Tensor(self.all_indices).long()
+        self.sp_indices = torch.Tensor(self.sp_indices).long()
+        self.su_indices = torch.Tensor(self.su_indices).long()
+        self.heldout_indices = torch.Tensor(self.heldout_indices).long()
+        self.info()
+
+    def info(self):
+        """ Report game info """
+        print('######### Game info #############')
+        print('Game: p {} t {}'.format(self.p, self.t))
+        print('Total: {} | Supervise: {} | Selfplay: {}'.format(
+            len(self.all_indices), len(self.su_indices), len(self.sp_indices)))
+        print('#################################')
 
     def random_sp_objs(self, batch_size):
         indices = torch.randint(len(self.sp_indices), size=[batch_size]).long()
@@ -77,11 +88,15 @@ class LewisGame:
     def env_config(self):
         return {'p': self.p, 't': self.t}
 
-    def get_generator(self, batch_size, names):
+    def get_generator(self, batch_size, names=None):
         """
         :param batch_size: Batch size
         :param names: A list of name of generator. From 'su', 'sp', 'heldout'
+            If None use all of them
         """
+        names = names if names is not None else ['su', 'sp', 'heldout']
+        if isinstance(names, str):
+            names = [names]
         names = set(names)
         gen_list = []
         for name in names:

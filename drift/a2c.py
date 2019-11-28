@@ -62,7 +62,7 @@ def selfplay_batch(objs, l_opt, listener, s_opt, speaker, ema_reward=None):
     return ema_reward
 
 
-def selfplay_batch_a2c(objs, game, l_opt, listener, s_opt, speaker, value_coef, ent_coef):
+def selfplay_batch_a2c(objs, l_opt, listener, s_opt, speaker, value_coef, ent_coef):
     """ Use a learnt value function """
     # Generate batch
     a2c_info = speaker.a2c(objs)

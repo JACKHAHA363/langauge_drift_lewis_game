@@ -28,7 +28,7 @@ def imitate_listener_batch(student, teacher, opt, msgs, temperature=0):
         opt.step()
 
 
-def imitate_speak_batch(student, teacher, opt, objs, temperature=0, use_sample=False, student_ctx=False):
+def imitate_speak_batch(student, teacher, opt, objs, temperature=0., use_sample=False, student_ctx=False):
     """ Imitate teacher on this batch. If temperature > 0, it's imitate soft label.
         Else imitate argmax
     """
@@ -55,3 +55,45 @@ def imitate_speak_batch(student, teacher, opt, objs, temperature=0, use_sample=F
         teacher_logits = teacher.get_logits(msgs=context, objs=objs)
         msgs = torch.distributions.Categorical(logits=teacher_logits / temperature).sample()
         train_speaker_batch(student, opt, objs, msgs)
+
+
+def listener_imitate(game, student_listener, teacher_listener, max_steps, temperature=0, distilled_speaker=None):
+    l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
+    step = 0
+    try:
+        while True:
+            if step >= max_steps:
+                break
+
+            # Generate the msg
+            objs = game.get_random_objs(50)
+            if distilled_speaker is None:
+                msgs = game.objs_to_msg(game.get_random_objs(50))
+            else:
+                with torch.no_grad():
+                    _, msgs = distilled_speaker.sample(objs)
+
+            # Train for a batch
+            imitate_listener_batch(student_listener, teacher_listener, l_opt, msgs, temperature)
+            step += 1
+
+    except KeyboardInterrupt:
+        pass
+
+
+def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperature=0., use_sample=False,
+                    student_ctx=True):
+    s_opt = torch.optim.Adam(lr=1e-4, params=student_speaker.parameters())
+    step = 0
+    try:
+        while True:
+            if step >= max_steps:
+                break
+
+            # Generate batch with teacher listener
+            objs = game.get_random_objs(50)
+            imitate_speak_batch(student_speaker, teacher_speaker, s_opt, objs, temperature, use_sample, student_ctx)
+            step += 1
+
+    except KeyboardInterrupt:
+        pass
