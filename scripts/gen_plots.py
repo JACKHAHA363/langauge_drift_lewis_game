@@ -63,10 +63,12 @@ def combine_series(series_list):
     :param series_list: a list of `Series` assuming steps are aligned
     :return: steps, means, stds
     """
-    steps = series_list[0].steps
+    step_sizes = [len(series.steps) for series in series_list]
+    min_idx = np.argmin(step_sizes)
+    steps = series_list[min_idx].steps
 
     # [nb_run, nb_steps]
-    all_values = [series.values for series in series_list]
+    all_values = [series.values[:len(steps)] for series in series_list]
     means = np.mean(all_values, axis=0)
     stds = np.std(all_values, axis=0)
     return steps, means, stds
