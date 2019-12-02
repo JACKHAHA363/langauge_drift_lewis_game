@@ -3,61 +3,8 @@ Lewis Signal Game
 """
 import torch
 from torch.nn.functional import softmax
-from itertools import product
-from drift import USE_GPU, EVALUATION_RATIO
-from drift.utils import timeit
-import numpy as np
-import argparse
-
-
-class LewisGame:
-    fields = [('p', int, 6, 'nb properties'),
-              ('t', int, 10, 'nb types')]
-
-    @staticmethod
-    def get_parser(parser=None):
-        if parser is None:
-            parser = argparse.ArgumentParser()
-        for name, dtype, val, desc in LewisGame.fields:
-            parser.add_argument('-' + name, default=val, type=dtype, help=desc)
-        return parser
-
-    @classmethod
-    def get_default_config(cls):
-        return {name: default for name, _, default, _ in cls.fields}
-
-    def __init__(self, p, t):
-        print('Building a game with p: {}, t: {}'.format(p, t))
-        self.p = p
-        self.t = t
-        self.all_objs = torch.LongTensor([obj for obj in product(*[[t for t in range(self.t)] for _ in range(self.p)])])
-
-        # The offset vector of converting to msg
-        self.msg_offset = np.arange(0, self.p) * self.t
-        #np.random.shuffle(self.msg_offset)
-        self.msg_offset = torch.Tensor(self.msg_offset).long()
-        self.all_msgs = self.objs_to_msg(self.all_objs)
-
-        # Move to GPU
-        if USE_GPU:
-            self.all_objs = self.all_objs.cuda()
-            self.all_msgs = self.all_msgs.cuda()
-            self.msg_offset = self.msg_offset.cuda()
-
-    def get_random_objs(self, batch_size):
-        indices = torch.randint(len(self.all_objs), size=[batch_size]).long()
-        return self.all_objs[indices]
-
-    @property
-    def vocab_size(self):
-        return self.t * self.p
-
-    def objs_to_msg(self, objs):
-        """ Generate the ground truth language for objects
-        :param [bsz, nb_props]
-        :return [bsz, nb_props]
-        """
-        return objs + self.msg_offset.unsqueeze(0)
+from drift import USE_GPU
+from drift.utils import _obj_prob_to_msg_prob, increment_2d_matrix
 
 
 class Agent(torch.nn.Module):
@@ -140,195 +87,90 @@ class BaseListener(Agent):
         return oh_msgs
 
 
-@timeit('get_comm_acc')
-def get_comm_acc(val_generator, listener, speaker):
+"""
+Evaluation Utils
+"""
+def eval_comm_loop(generator, listener, speaker):
+    """ Return the communication accuracy on give generator """
     corrects = 0
     total = 0
-    for objs, _ in val_generator:
+    vocab_size = listener.env_config['p'] * listener.env_config['t']
+    l_conf_mat_gr_msg = torch.zeros([vocab_size, vocab_size])
+    if USE_GPU:
+        l_conf_mat_gr_msg = l_conf_mat_gr_msg.cuda()
+    for objs, _ in generator:
         with torch.no_grad():
-            msgs = speaker.greedy(objs)
-            l_logits = listener.get_logits(listener.one_hot(msgs))
+            # Communicate
+            gr_msgs = speaker.greedy(objs)
+            l_logits = listener.get_logits(listener.one_hot(gr_msgs))
             preds = torch.argmax(l_logits, dim=-1)
             corrects += (preds == objs).float().sum().item()
             total += objs.numel()
-    return {'comm_acc': corrects / total}
+
+            # Listener acc on speaker msg
+            l_probs = softmax(l_logits, dim=-1)
+            increment_2d_matrix(l_conf_mat_gr_msg, gr_msgs.view(-1),
+                                _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
+    acc_gr_msg = (l_conf_mat_gr_msg.diag().sum() / l_conf_mat_gr_msg.sum()).item()
+    l_conf_mat_gr_msg /= (1e-32 + torch.sum(l_conf_mat_gr_msg, -1, keepdim=True))
+    return {'comm_acc': corrects / total, 'listen/acc_gr_msg': acc_gr_msg}, l_conf_mat_gr_msg
 
 
-def eval_speaker_loop(val_generator, speaker):
-    """ Return stats """
+def eval_speaker_loop(generator, speaker):
+    """ Return stats and conf matrix """
     tf_corrects = 0
     gr_corrects = 0
     total = 0
+    ent = 0
+    nb_batch = 0
     vocab_size = speaker.env_config['p'] * speaker.env_config['t']
-    s_conf_mat = torch.zeros([vocab_size, vocab_size])
-    for objs, msgs in val_generator:
+    conf_mat = torch.zeros([vocab_size, vocab_size])
+    if USE_GPU:
+        conf_mat = conf_mat.cuda()
+
+    for objs, msgs in generator:
+        nb_batch += 1
+        total += msgs.numel()
+
         with torch.no_grad():
+            # Teacher Forcing
             logits = speaker.get_logits(objs=objs, msgs=msgs)
             pred = torch.argmax(logits, dim=-1)
             tf_corrects += (pred == msgs).float().sum().item()
 
-            gr_msgs = speaker.greedy(objs)
-            gr_corrects += (gr_msgs == msgs).float().sum().item()
-            total += msgs.numel()
-
-            s_logits = speaker.get_logits(objs=objs, msgs=msgs)
-            s_probs = softmax(s_logits, dim=-1)
-            increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
-    s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
-    return {'speak/tf_acc': tf_corrects / total,
-            'speak/gr_acc': gr_corrects / total}, s_conf_mat
-
-
-def eval_listener_loop(val_generator, listener):
-    l_corrects = 0
-    l_total = 0
-    for objs, msgs in val_generator:
-        with torch.no_grad():
-            l_logits = listener.get_logits(listener.one_hot(msgs))
-            l_pred = torch.argmax(l_logits, dim=-1)
-            l_corrects += (l_pred == objs).float().sum().item()
-            l_total += objs.numel()
-    return {'l_acc': l_corrects / l_total}
-
-
-def _obj_prob_to_msg_prob(obj_probs):
-    """
-    :param obj_probs: [nb_obj, nb_type, nb_value]
-    :return: [nb_obj, nb_type, nb_type * nb_value]
-    """
-    nb_obj, nb_type, nb_value = obj_probs.shape[0], obj_probs.shape[1], obj_probs.shape[2]
-    result = torch.zeros([nb_obj, nb_type, nb_type * nb_value])
-    result = result.to(device=obj_probs.device)
-    for i in range(nb_type):
-        start = i * nb_value
-        end = (i+1) * nb_value
-        result[:, i, start:end] = obj_probs[:, i]
-    return result
-
-
-@timeit('eval_loop')
-def eval_loop(val_generator, listener, speaker, game):
-    """ Return accuracy as well as confusion matrix for symbols """
-    l_corrects = 0
-    l_total = 0
-    s_tf_corrects = 0
-    s_gr_corrects = 0
-    s_total = 0
-    l_ent = 0
-    s_ent = 0
-    nb_batch = 0
-
-    # Add speaker confusion matrix
-    vocab_size = listener.env_config['p'] * listener.env_config['t']
-    s_conf_mat = torch.zeros([vocab_size, vocab_size])
-    l_conf_mat = torch.zeros([vocab_size, vocab_size])
-    l_conf_mat_gr_msg = torch.zeros([vocab_size, vocab_size])
-    if USE_GPU:
-        s_conf_mat = s_conf_mat.cuda()
-        l_conf_mat = l_conf_mat.cuda()
-    for objs, msgs in val_generator:
-        with torch.no_grad():
-            # Listener stats on correct message
-            l_logits = listener.get_logits(listener.one_hot(msgs))
-            l_pred = torch.argmax(l_logits, dim=-1)
-            l_probs = softmax(l_logits, dim=-1)
-            increment_2d_matrix(l_conf_mat, msgs.view(-1), _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
-            l_corrects += (l_pred == objs).float().sum().item()
-            l_total += objs.numel()
-
-            # Speaker stats
-            s_logits = speaker.get_logits(objs=objs, msgs=msgs)
-            s_pred = torch.argmax(s_logits, dim=-1)
-            s_probs = softmax(s_logits, dim=-1)
-            s_tf_corrects += (s_pred == msgs).float().sum().item()
-
+            # Greedy
             gr_msgs = speaker.greedy(objs=objs)
-            s_gr_corrects += (gr_msgs == msgs).float().sum().item()
-            s_total += msgs.numel()
-            increment_2d_matrix(s_conf_mat, msgs.view(-1), s_probs.view(-1, vocab_size))
+            gr_corrects += (gr_msgs == msgs).float().sum().item()
+            gr_logits = speaker.get_logits(objs=objs, msgs=gr_msgs)
+            gr_probs = softmax(gr_logits, dim=-1)
+            increment_2d_matrix(conf_mat, msgs.view(-1), gr_probs.view(-1, vocab_size))
+            ent += -(gr_probs * torch.log(gr_probs + 1e-32)).mean().item()
 
-            # Listener stats on speaker msg
-            l_logits = listener.get_logits(listener.one_hot(gr_msgs))
-            l_probs = softmax(l_logits, dim=-1)
-            increment_2d_matrix(l_conf_mat_gr_msg, gr_msgs.view(-1), _obj_prob_to_msg_prob(l_probs).view([-1, vocab_size]))
-
-            # Entropy
-            l_ent += -(l_probs * torch.log(l_probs + 1e-32)).mean().item()
-            s_ent += -(s_probs * torch.log(s_probs + 1e-32)).mean().item()
-            nb_batch += 1
-
-    s_conf_mat /= (1e-32 + torch.sum(s_conf_mat, -1, keepdim=True))
-    l_conf_mat /= (1e-32 + torch.sum(l_conf_mat, -1, keepdim=True))
-    stats = {'listen/acc_s_msg': (l_conf_mat_gr_msg.diag().sum() / l_conf_mat_gr_msg.sum()).item()}
-    l_conf_mat_gr_msg /= (1e-32 + torch.sum(l_conf_mat_gr_msg, -1, keepdim=True))
-    stats.update({'listen/acc': l_corrects / l_total, 'speak/tf_acc': s_tf_corrects / s_total,
-                  'speak/gr_acc': s_gr_corrects / s_total,
-                  'listen/ent': l_ent / nb_batch, 'speak/ent': s_ent / nb_batch})
-    return stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg
+    conf_mat /= (1e-32 + torch.sum(conf_mat, -1, keepdim=True))
+    return {'speak/tf_acc': tf_corrects / total,
+            'speak/gr_acc': gr_corrects / total,
+            'speak/ent': ent / nb_batch}, conf_mat
 
 
-class Dataset:
-    """ The dataset object """
+def eval_listener_loop(generator, listener):
+    """ Return stats and conf mat """
+    corrects = 0
+    total = 0
+    ent = 0
+    nb_batch = 0
+    vocab_size = listener.env_config['p'] * listener.env_config['t']
+    conf_mat = torch.zeros([vocab_size, vocab_size])
+    if USE_GPU:
+        conf_mat = conf_mat.cuda()
+    for objs, msgs in generator:
+        nb_batch += 1
+        total += objs.numel()
+        with torch.no_grad():
+            logits = listener.get_logits(listener.one_hot(msgs))
+            pred = torch.argmax(logits, dim=-1)
+            corrects += (pred == objs).float().sum().item()
 
-    def __init__(self, game, train_size):
-        assert isinstance(game, LewisGame)
-        self.train_objs = game.get_random_objs(train_size)
-        self.train_msgs = game.objs_to_msg(self.train_objs)
-        self.game = game
-
-        # Shuffle all objects index
-        self.all_indices = [i for i in range(len(game.all_objs))]
-        np.random.shuffle(self.all_indices)
-        self.train_inds = self.all_indices[:train_size].copy()
-
-        # Reshuffle all indice to get valid objects
-        np.random.shuffle(self.all_indices)
-        self.valid_start = 0
-
-    def train_generator(self, batch_size):
-        return self._get_generator(self.game.all_objs[self.train_inds],
-                                   self.game.all_msgs[self.train_inds],
-                                   batch_size)
-
-    def val_generator(self, batch_size):
-        """ Used for evaluation. For each validation loop, randomly pick EVALUATION_RATIO * total_objects
-        """
-        split = int(EVALUATION_RATIO * len(self.all_indices))
-        valid_ids = self.all_indices[self.valid_start: self.valid_start + split]
-        self.valid_start += split
-
-        # Reset valid_start if exceeding limit and reshuffle ids
-        if self.valid_start >= len(self.all_indices):
-            self.valid_start = 0
-            np.random.shuffle(self.all_indices)
-
-        # Take the validation data
-        objs = self.game.all_objs[valid_ids]
-        msgs = self.game.all_msgs[valid_ids]
-        return self._get_generator(objs, msgs, batch_size)
-
-    @staticmethod
-    def _get_generator(objs, msgs, batch_size):
-        start = 0
-        while start < len(objs):
-            batch_objs, batch_msgs = objs[start: start + batch_size], msgs[start: start + batch_size]
-            if USE_GPU:
-                batch_objs = batch_objs.cuda()
-                batch_msgs = batch_msgs.cuda()
-            yield batch_objs, batch_msgs
-            start += batch_size
-
-
-def increment_2d_matrix(mat, row_id, row_updates):
-    """
-    :param row_id: [nb_indices]
-    :param row_updates: [nb_indices, nb_col]
-    """
-    nb_row, nb_col = mat.shape
-
-    # Build indices [nb_indices * nb_col]
-    col = torch.arange(0, nb_col)
-    indices = row_id[:, None] * nb_col + col[None, :]
-    indices = indices.view(-1)
-
-    mat.put_(indices, row_updates.view(-1), accumulate=True)
+            probs = softmax(logits, dim=-1)
+            increment_2d_matrix(conf_mat, msgs.view(-1), _obj_prob_to_msg_prob(probs).view([-1, vocab_size]))
+            ent += -(probs * torch.log(probs + 1e-32)).mean().item()
+    return {'listen/acc': corrects / total, 'listen/ent': ent / nb_batch}, conf_mat

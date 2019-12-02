@@ -1,4 +1,5 @@
 """
+(Close to getting depricated...)
 Try using population
     1. Training against many listener and many speakers
 """

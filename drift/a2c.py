@@ -2,8 +2,6 @@ import torch
 import numpy as np
 from torch.distributions import Categorical
 
-BATCH_SIZE = 500
-
 
 # class ExponentialMovingAverager:
 #     def __init__(self, init_mean, gamma=0.1):
@@ -28,12 +26,11 @@ class ExponentialMovingAverager:
         self.num[idxes] += 1
 
 
-def selfplay_batch(game, l_opt, listener, s_opt, speaker, ema_reward=None):
+def selfplay_batch(objs, l_opt, listener, s_opt, speaker, ema_reward=None):
     """ Use exponential reward (kinda depricated not working)
     :return updated average reward
     """
     # Generate batch
-    objs = game.get_random_objs(BATCH_SIZE)
     idxes = objs[:,5]*100000+objs[:,4]*10000+objs[:,3]*1000+objs[:,2]*100+objs[:,1]*10+objs[:,0]
     s_logits = speaker(objs)
     msgs = Categorical(logits=s_logits).sample()
@@ -65,10 +62,9 @@ def selfplay_batch(game, l_opt, listener, s_opt, speaker, ema_reward=None):
     return ema_reward
 
 
-def selfplay_batch_a2c(game, l_opt, listener, s_opt, speaker, value_coef, ent_coef):
+def selfplay_batch_a2c(objs, l_opt, listener, s_opt, speaker, value_coef, ent_coef):
     """ Use a learnt value function """
     # Generate batch
-    objs = game.get_random_objs(BATCH_SIZE)
     a2c_info = speaker.a2c(objs)
     oh_msgs = listener.one_hot(a2c_info['msgs'])
     l_logits = listener.get_logits(oh_msgs)

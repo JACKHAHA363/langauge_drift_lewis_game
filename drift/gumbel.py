@@ -1,15 +1,11 @@
-from drift import USE_GPU
-import torch
 from torch.distributions import Categorical
-import torch.nn.functional as F
 
 BATCH_SIZE = 500
 
 
-def selfplay_batch(game, gumbel_temperature, l_opt, listener, s_opt, speaker):
+def selfplay_batch(objs, gumbel_temperature, l_opt, listener, s_opt, speaker):
     """ Generate a batch and play """
     # Generate batch
-    objs = game.get_random_objs(BATCH_SIZE)
     y, msgs = speaker.gumbel(objs, gumbel_temperature)
 
     # Get gradient to keep backprop to speaker
