@@ -5,7 +5,7 @@ import numpy as np
 
 VAL_BATCH_SIZE = 1000
 LOG_STEPS = 10
-MAX_STEPS = 5000
+MAX_STEPS = 10000
 
 
 def train_listener_batch(listener, l_opt, objs, msgs):
@@ -45,7 +45,7 @@ def train_speaker_until(acc, speaker, game):
     """ Return a speaker trained until desired acc. If speaker is None construct a default one.
         Acc is evaluate on sp + val
     """
-    s_opt = torch.optim.Adam(lr=1e-4, params=speaker.parameters())
+    s_opt = torch.optim.Adam(lr=1e-3, params=speaker.parameters())
 
     should_stop = False
     step = 0
@@ -80,7 +80,7 @@ def train_speaker_until(acc, speaker, game):
 
 def train_listener_until(acc, listener, game):
     """ Train listener until desired acc """
-    l_opt = torch.optim.Adam(lr=5e-4, params=listener.parameters())
+    l_opt = torch.optim.Adam(lr=1e-3, params=listener.parameters())
 
     should_stop = False
     step = 0
