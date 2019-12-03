@@ -57,7 +57,7 @@ def imitate_speak_batch(student, teacher, opt, objs, temperature=0., use_sample=
         train_speaker_batch(student, opt, objs, msgs)
 
 
-def listener_imitate(game, student_listener, teacher_listener, max_steps, temperature=0, distilled_speaker=None):
+def listener_imitate(game, student_listener, teacher_listener, max_steps, distilled_speaker, temperature=0.):
     l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
     step = 0
     try:
@@ -67,11 +67,8 @@ def listener_imitate(game, student_listener, teacher_listener, max_steps, temper
 
             # Generate the msg
             objs = game.random_sp_objs(50)
-            if distilled_speaker is None:
-                msgs = game.objs_to_msg(game.random_sp_objs(50))
-            else:
-                with torch.no_grad():
-                    _, msgs = distilled_speaker.sample(objs)
+            with torch.no_grad():
+                _, msgs = distilled_speaker.sample(objs)
 
             # Train for a batch
             imitate_listener_batch(student_listener, teacher_listener, l_opt, msgs, temperature)

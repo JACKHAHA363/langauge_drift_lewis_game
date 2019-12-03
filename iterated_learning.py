@@ -35,7 +35,6 @@ def get_args():
     parser.add_argument('-init_weight', action='store_true', help='Use the ckpt weights')
     parser.add_argument('-distill_temperature', type=float, default=0, help='If 0 fit with argmax, else use '
                                                                             'soft label with that temperature')
-    parser.add_argument('-sequential', action='store_true', help='Use sequential distillation')
     parser.add_argument('-student_ctx', action='store', help='Whether or not to use student as context '
                                                              'during speaker recurrent distillation')
     parser.add_argument('-generation_steps', type=int, default=2500, help='Reset one of the agent to the checkpoint '
@@ -200,17 +199,12 @@ def iteration_selfplay(args):
                                     use_sample=args.s_use_sample, student_ctx=args.student_ctx)
 
                 # Distill using distilled speaker msg
-                if args.sequential:
-                    if args.l_transmission_steps >= 0:
-                        print('Distill sequentially')
-                        listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
-                                         max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
-                                         distilled_speaker=speaker)
-
-                # Distill using unlimited msg
-                else:
+                if args.l_transmission_steps >= 0:
+                    print('Distill sequentially')
                     listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
-                                     max_steps=args.l_transmission_steps, temperature=args.distill_temperature)
+                                     max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
+                                     distilled_speaker=speaker)
+
                 _, final_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
 
                 img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
