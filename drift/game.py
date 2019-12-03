@@ -75,6 +75,11 @@ class LewisGame:
         batch_ids = self.sp_indices[indices]
         return self.all_objs[batch_ids]
 
+    def random_su_objs_msgs(self, batch_size):
+        indices = torch.randint(len(self.su_indices), size=[batch_size]).long()
+        batch_ids = self.su_indices[indices]
+        return self.all_objs[batch_ids], self.all_msgs[batch_ids]
+
     @property
     def vocab_size(self):
         return self.t * self.p
