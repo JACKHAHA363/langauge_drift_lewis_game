@@ -10,34 +10,35 @@ import torch
 import numpy as np
 from shutil import rmtree
 from tensorboardX import SummaryWriter
-from drift.core import LewisGame, Dataset, eval_loop, get_comm_acc
 from drift.gumbel import selfplay_batch
+from drift.evaluation import eval_loop
 from drift.a2c import selfplay_batch_a2c
 from drift import USE_GPU
-
-LOG_STEPS = 100
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-ckpt_dir', required=True, help='path to save/load ckpts')
-    parser.add_argument('-steps', default=12000, type=int, help='total training steps')
     parser.add_argument('-seed', default=None, type=int, help='The global seed')
     parser.add_argument('-logdir', required=True, help='path to tb log')
-    parser.add_argument('-n', type=int, default=3, help="population size")
     parser.add_argument('-save_vocab_change', default=None, help='Path to save the vocab change results. '
                                                                  'If None not save')
-    parser.add_argument('-save_population', default=None, help='Path to save the population. If None not save')
+    parser.add_argument('-steps', default=10000, type=int, help='Total training steps')
+    parser.add_argument('-log_steps', default=100, type=int, help='Log frequency')
     parser.add_argument('-s_lr', default=1e-3, type=float, help='learning rate for speaker')
     parser.add_argument('-l_lr', default=1e-3, type=float, help='learning rate for listener')
+    parser.add_argument('-batch_size', default=100, type=int, help='Batch size')
     parser.add_argument('-method', choices=['gumbel', 'a2c'], default='gumbel', help='Which way to train')
 
-    # Gumbel
+    # S2P
+    parser.add_argument('-n', type=int, default=5, help='population size')
+
+    # For gumbel
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
     parser.add_argument('-decay_rate', type=float, default=1., help='temperature decay rate. Default no decay')
     parser.add_argument('-min_temperature', type=float, default=1, help='Minimum temperature')
 
-    # A2C
+    # For a2c
     parser.add_argument('-v_coef', type=float, default=0.5, help='Value loss coefficient')
     parser.add_argument('-ent_coef', type=float, default=0.001, help='entropy reg coefficient')
     return parser.parse_args()
@@ -74,15 +75,14 @@ def population_selfplay(args):
 
     # Load populations
     s_and_opts, l_and_opts = _load_population_and_opts(args, s_ckpts, l_ckpts)
-    game = LewisGame(**s_and_opts[0][0].env_config)
-    dset = Dataset(game, 1)
+    game = torch.load(os.path.join(args.ckpt_dir, 'game.pth'))
     if os.path.exists(args.logdir):
         rmtree(args.logdir)
     writer = SummaryWriter(args.logdir)
 
     # Training
     temperature = args.temperature
-    vocab_change_data = {'speak': [], 'listen': []}
+    vocab_change_data = {}
     try:
         for step in range(args.steps):
             # Randomly pick one pair
@@ -92,39 +92,18 @@ def population_selfplay(args):
             # Train for a Batch
             speaker.train(True)
             listener.train(True)
+            objs = game.random_sp_objs(args.batch_size)
             if args.method == 'gumbel':
-                selfplay_batch(game, temperature, l_opt, listener, s_opt, speaker)
+                selfplay_batch(objs, temperature, l_opt, listener, s_opt, speaker)
                 temperature = max(args.min_temperature, temperature * args.decay_rate)
             elif args.method == 'a2c':
-                selfplay_batch_a2c(game, l_opt, listener, s_opt, speaker, args.v_coef, args.ent_coef)
+                selfplay_batch_a2c(objs, l_opt, listener, s_opt, speaker, args.v_coef, args.ent_coef)
             else:
                 raise NotImplementedError
 
             # Eval and Logging
-            if step % LOG_STEPS == 0:
-                speaker.train(False)
-                listener.train(False)
-                stats, s_conf_mat, l_conf_mat, l_conf_mat_gr_msg = eval_loop(dset.val_generator(1000),
-                                                                             listener=listener,
-                                                                             speaker=speaker, game=game)
-                writer.add_image('s_conf_mat', s_conf_mat.unsqueeze(0), step)
-                writer.add_image('l_conf_mat', l_conf_mat.unsqueeze(0), step)
-                writer.add_image('l_conf_mat_gr_msg', l_conf_mat_gr_msg.unsqueeze(0), step)
-
-                if args.save_vocab_change is not None:
-                    vocab_change_data['speak'].append(s_conf_mat)
-                    vocab_change_data['listen'].append(l_conf_mat)
-                stats.update(get_comm_acc(dset.val_generator(1000), listener, speaker))
-                stats['temp'] = temperature
-                logstr = ["step {}:".format(step)]
-                for name, val in stats.items():
-                    logstr.append("{}: {:.4f}".format(name, val))
-                    writer.add_scalar(name, val, step)
-                writer.flush()
-                print(' '.join(logstr))
-                #if stats['comm_acc'] == 1.:
-                #    stats['step'] = step
-                #    break
+            if step % args.log_steps == 0:
+                eval_loop(listener, speaker, game, writer, step, vocab_change_data)
 
     except KeyboardInterrupt:
         pass
