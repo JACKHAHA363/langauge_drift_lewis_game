@@ -57,6 +57,27 @@ def imitate_speak_batch(student, teacher, opt, objs, temperature=0., use_sample=
         train_speaker_batch(student, opt, objs, msgs)
 
 
+def listener_finetune(game, student_listener, max_steps, distilled_speaker):
+    l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
+    step = 0
+    try:
+        while True:
+            if step >= max_steps:
+                break
+
+            # Generate the msg
+            objs = game.random_sp_objs(50)
+            with torch.no_grad():
+                _, msgs = distilled_speaker.sample(objs)
+
+            # Train for a batch
+            train_listener_batch(student_listener, l_opt, objs, msgs)
+            step += 1
+
+    except KeyboardInterrupt:
+        pass
+
+
 def listener_imitate(game, student_listener, teacher_listener, max_steps, distilled_speaker, temperature=0.):
     l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
     step = 0
