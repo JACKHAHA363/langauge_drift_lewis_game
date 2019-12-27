@@ -107,6 +107,8 @@ def main():
         for run in runs:
             event_file = os.listdir(os.path.join(args.exp_dir, exp_name, run))[0]
             run_data = parse_tb_event_file(os.path.join(args.exp_dir, exp_name, run, event_file))
+            if len(run_data) == 0:
+                continue
             all_tags = list(run_data.keys())
             all_data[exp_name].append(run_data)
 
