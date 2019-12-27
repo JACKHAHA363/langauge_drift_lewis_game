@@ -1,6 +1,7 @@
 import torch
 from torch.distributions import Categorical
 from drift.core import eval_listener_loop, eval_speaker_loop
+from drift import USE_GPU
 import numpy as np
 
 VAL_BATCH_SIZE = 1000
@@ -45,6 +46,8 @@ def train_speaker_until(acc, speaker, game):
     """ Return a speaker trained until desired acc. If speaker is None construct a default one.
         Acc is evaluate on sp + val
     """
+    if USE_GPU:
+        speaker = speaker.cuda()
     s_opt = torch.optim.Adam(lr=1e-3, params=speaker.parameters())
 
     should_stop = False
@@ -80,6 +83,8 @@ def train_speaker_until(acc, speaker, game):
 
 def train_listener_until(acc, listener, game):
     """ Train listener until desired acc """
+    if USE_GPU:
+        listener = listener.cuda()
     l_opt = torch.optim.Adam(lr=1e-3, params=listener.parameters())
 
     should_stop = False
