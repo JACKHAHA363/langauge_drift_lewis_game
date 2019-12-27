@@ -14,7 +14,7 @@ from drift.evaluation import eval_loop
 from drift.core import eval_speaker_loop, eval_comm_loop, eval_listener_loop
 from drift.gumbel import selfplay_batch
 from drift.a2c import selfplay_batch_a2c
-from drift.imitate import listener_imitate, speaker_imitate
+from drift.imitate import listener_imitate, speaker_imitate, listener_finetune
 from drift import USE_GPU
 
 
@@ -47,6 +47,7 @@ def get_args():
                                                                               'for listener.'
                                                                               'If negative -1, no transmission')
     parser.add_argument('-s_use_sample', action='store_true')
+    parser.add_argument('-l_finetune', action='store_true')
 
     # For gumbel
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
@@ -62,6 +63,10 @@ def get_args():
 def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat,
                         teacher_s_conf_mat, distill_temperature):
     """ Plot each teacher, student, and final """
+    final_s_conf_mat = final_s_conf_mat.cpu()
+    student_s_conf_mat = student_s_conf_mat.cpu()
+    teacher_s_conf_mat = teacher_s_conf_mat.cpu()
+
     # Distort teacher with temperature
     teacher_s_conf_mat = torch.softmax(torch.log(teacher_s_conf_mat) / distill_temperature, dim=-1)
     NB_PLOT_PER_ROW = 5
@@ -111,6 +116,8 @@ def iteration_selfplay(args):
     s_ckpt = deepcopy(speaker.state_dict())
     l_ckpt = deepcopy(listener.state_dict())
     game = torch.load(os.path.join(args.ckpt_dir, 'game.pth'))
+    if USE_GPU:
+        game.cuda()
     game.info()
     if os.path.exists(args.logdir):
         rmtree(args.logdir)
@@ -156,10 +163,15 @@ def iteration_selfplay(args):
 
                 # Distill using distilled speaker msg
                 if args.l_transmission_steps >= 0:
-                    print('Distill sequentially')
-                    listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
-                                     max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
-                                     distilled_speaker=speaker)
+                    if args.l_finetune:
+                        print('Finetune listener!')
+                        listener_finetune(game=game, student_listener=listener, max_steps=args.l_transmission_steps,
+                                          distilled_speaker=speaker)
+                    else:
+                        print('Distill listener')
+                        listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
+                                         max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
+                                         distilled_speaker=speaker)
 
                 _, final_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
 

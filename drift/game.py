@@ -42,9 +42,7 @@ class LewisGame:
 
         # Move to GPU
         if USE_GPU:
-            self.all_objs = self.all_objs.cuda()
-            self.all_msgs = self.all_msgs.cuda()
-            self.msg_offset = self.msg_offset.cuda()
+            self.cuda()
 
         # Build the dataset
         total_size = self.all_objs.shape[0]
@@ -61,6 +59,11 @@ class LewisGame:
         self.su_indices = torch.Tensor(self.su_indices).long()
         self.heldout_indices = torch.Tensor(self.heldout_indices).long()
         self.info()
+
+    def cuda(self):
+        self.all_objs = self.all_objs.cuda()
+        self.all_msgs = self.all_msgs.cuda()
+        self.msg_offset = self.msg_offset.cuda()
 
     def info(self):
         """ Report game info """

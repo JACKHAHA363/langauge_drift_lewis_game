@@ -10,7 +10,7 @@ else:
     print('Use CPU')
 
 # Ratio of total objects used for evaluation [0,1]. Use all if we have GPU
-EVALUATION_RATIO = 1 if not USE_GPU else 0.5
+EVALUATION_RATIO = 1 if not USE_GPU else 1
 print('The currect evaluation ratio is {:.2f}. '.format(EVALUATION_RATIO))
 
 # Generate the distribution for sampling
