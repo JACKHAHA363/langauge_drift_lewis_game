@@ -40,7 +40,7 @@ def increment_2d_matrix(mat, row_id, row_updates):
     nb_row, nb_col = mat.shape
 
     # Build indices [nb_indices * nb_col]
-    col = torch.arange(0, nb_col)
+    col = torch.arange(0, nb_col).to(device=row_updates.device)
     indices = row_id[:, None] * nb_col + col[None, :]
     indices = indices.view(-1)
 

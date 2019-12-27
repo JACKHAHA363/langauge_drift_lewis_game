@@ -63,6 +63,10 @@ def get_args():
 def plot_distill_change(vocab_size, final_s_conf_mat, student_s_conf_mat,
                         teacher_s_conf_mat, distill_temperature):
     """ Plot each teacher, student, and final """
+    final_s_conf_mat = final_s_conf_mat.cpu()
+    student_s_conf_mat = student_s_conf_mat.cpu()
+    teacher_s_conf_mat = teacher_s_conf_mat.cpu()
+
     # Distort teacher with temperature
     teacher_s_conf_mat = torch.softmax(torch.log(teacher_s_conf_mat) / distill_temperature, dim=-1)
     NB_PLOT_PER_ROW = 5
@@ -112,6 +116,8 @@ def iteration_selfplay(args):
     s_ckpt = deepcopy(speaker.state_dict())
     l_ckpt = deepcopy(listener.state_dict())
     game = torch.load(os.path.join(args.ckpt_dir, 'game.pth'))
+    if USE_GPU:
+        game.cuda()
     game.info()
     if os.path.exists(args.logdir):
         rmtree(args.logdir)
