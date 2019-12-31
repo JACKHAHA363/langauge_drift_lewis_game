@@ -113,10 +113,10 @@ def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperatu
             # Generate batch with teacher listener
             objs = game.random_sp_objs(50)
             imitate_speak_batch(student_speaker, teacher_speaker, s_opt, objs, temperature, use_sample, student_ctx)
-            step += 1
-            if with_eval_data and step % (max_steps / 10) == 0:
+            if with_eval_data and step % 10 == 0:
                 stats = eval_speaker_loop(game.get_generator(1000), student_speaker)[0]
                 statss.append(stats)
+            step += 1
 
     except KeyboardInterrupt:
         pass

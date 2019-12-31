@@ -156,10 +156,12 @@ def iteration_selfplay(args):
 
                 print('Start transmission')
                 student_s_conf_mat = None
-                teacher_s_conf_mat = None
                 if args.save_distill_dist:
                     _, student_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
-                    _, teacher_s_conf_mat = eval_speaker_loop(game.get_generator(1000), teacher_speaker)
+
+                teacher_speaker_stats, teacher_s_conf_mat = None, None
+                if args.save_distill_dist or args.save_imitate_stats:
+                    teacher_speaker_stats, teacher_s_conf_mat = eval_speaker_loop(game.get_generator(1000), teacher_speaker)
 
                 if args.s_transmission_steps >= 0:
                     imitate_statss = speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
@@ -168,10 +170,13 @@ def iteration_selfplay(args):
                                                      use_sample=args.s_use_sample, student_ctx=args.student_ctx,
                                                      with_eval_data=args.save_imitate_stats)
                     if imitate_statss is not None:
-                        fig, axs = plt.subplots(len(imitate_statss), figsize=(int(100 / len(imitate_statss)), 20))
+                        fig, axs = plt.subplots(len(imitate_statss), figsize=(7, 7*len(imitate_statss)))
                         for name, ax in zip(imitate_statss, axs.reshape(-1)):
-                            ax.plot(imitate_statss[name])
+                            ax.plot(imitate_statss[name], label='student')
+                            ax.plot([0, len(imitate_statss[name])],
+                                    [teacher_speaker_stats[name], teacher_speaker_stats[name]], label='teacher')
                             ax.set_title(name)
+                            ax.legend()
                         print('Save distillation stats')
                         fig.savefig(os.path.join(args.logdir, 'distill_{}_stats.png'.format(step)))
 
