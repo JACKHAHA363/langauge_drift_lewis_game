@@ -177,8 +177,8 @@ def iteration_selfplay(args):
                                     [teacher_speaker_stats[name], teacher_speaker_stats[name]], label='teacher')
                             ax.set_title(name)
                             ax.legend()
-                        print('Save distillation stats')
-                        fig.savefig(os.path.join(args.logdir, 'distill_{}_stats.png'.format(step)))
+                        print('Save imitation stats')
+                        fig.savefig(os.path.join(args.logdir, 'imitation_{}_stats.png'.format(step)))
 
                 # Distill using distilled speaker msg
                 if args.l_transmission_steps >= 0:
@@ -197,8 +197,8 @@ def iteration_selfplay(args):
                                               student_s_conf_mat=student_s_conf_mat,
                                               teacher_s_conf_mat=teacher_s_conf_mat,
                                               distill_temperature=args.distill_temperature)
-                    print('Save distillation dist change')
-                    img.savefig(os.path.join(args.logdir, 'distill_{}.png'.format(step)))
+                    print('Save distribution change')
+                    img.savefig(os.path.join(args.logdir, 'dist_change_{}.png'.format(step)))
 
                 # Save for future student if do not use initial weight
                 if not args.init_weight:
