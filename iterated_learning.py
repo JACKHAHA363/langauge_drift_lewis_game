@@ -48,6 +48,8 @@ def get_args():
                                                                               'If negative -1, no transmission')
     parser.add_argument('-s_use_sample', action='store_true')
     parser.add_argument('-l_finetune', action='store_true')
+    parser.add_argument('-save_imitate_stats', action='store_true', help='Return the learning dynamic of imitation')
+    parser.add_argument('-save_distill_dist', action='store_true')
 
     # For gumbel
     parser.add_argument('-temperature', type=float, default=10, help='Initial temperature')
@@ -153,13 +155,30 @@ def iteration_selfplay(args):
                     listener.load_state_dict(l_ckpt)
 
                 print('Start transmission')
-                # Randomly pick some word for initialization
-                _, student_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
-                _, teacher_s_conf_mat = eval_speaker_loop(game.get_generator(1000), teacher_speaker)
+                student_s_conf_mat = None
+                if args.save_distill_dist:
+                    _, student_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
+
+                teacher_speaker_stats, teacher_s_conf_mat = None, None
+                if args.save_distill_dist or args.save_imitate_stats:
+                    teacher_speaker_stats, teacher_s_conf_mat = eval_speaker_loop(game.get_generator(1000), teacher_speaker)
+
                 if args.s_transmission_steps >= 0:
-                    speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
-                                    max_steps=args.s_transmission_steps, temperature=args.distill_temperature,
-                                    use_sample=args.s_use_sample, student_ctx=args.student_ctx)
+                    imitate_statss = speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
+                                                     max_steps=args.s_transmission_steps,
+                                                     temperature=args.distill_temperature,
+                                                     use_sample=args.s_use_sample, student_ctx=args.student_ctx,
+                                                     with_eval_data=args.save_imitate_stats)
+                    if imitate_statss is not None:
+                        fig, axs = plt.subplots(len(imitate_statss), figsize=(7, 7*len(imitate_statss)))
+                        for name, ax in zip(imitate_statss, axs.reshape(-1)):
+                            ax.plot(imitate_statss[name], label='student')
+                            ax.plot([0, len(imitate_statss[name])],
+                                    [teacher_speaker_stats[name], teacher_speaker_stats[name]], label='teacher')
+                            ax.set_title(name)
+                            ax.legend()
+                        print('Save imitation stats')
+                        fig.savefig(os.path.join(args.logdir, 'imitation_{}_stats.png'.format(step)))
 
                 # Distill using distilled speaker msg
                 if args.l_transmission_steps >= 0:
@@ -172,14 +191,14 @@ def iteration_selfplay(args):
                         listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
                                          max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
                                          distilled_speaker=speaker)
-
-                _, final_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
-
-                img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
-                                          student_s_conf_mat=student_s_conf_mat,
-                                          teacher_s_conf_mat=teacher_s_conf_mat,
-                                          distill_temperature=args.distill_temperature)
-                img.savefig(os.path.join(args.logdir, 'distill_{}.png'.format(step)))
+                if args.save_distill_dist:
+                    _, final_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
+                    img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
+                                              student_s_conf_mat=student_s_conf_mat,
+                                              teacher_s_conf_mat=teacher_s_conf_mat,
+                                              distill_temperature=args.distill_temperature)
+                    print('Save distribution change')
+                    img.savefig(os.path.join(args.logdir, 'dist_change_{}.png'.format(step)))
 
                 # Save for future student if do not use initial weight
                 if not args.init_weight:
