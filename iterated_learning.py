@@ -47,6 +47,7 @@ def get_args():
                                                                               'If negative -1, no transmission')
     parser.add_argument('-s_use_sample', action='store_true')
     parser.add_argument('-l_finetune', action='store_true')
+    parser.add_argument('-same_opt', action='store_true')
     parser.add_argument('-save_imitate_stats', action='store_true', help='Return the learning dynamic of imitation')
     parser.add_argument('-save_distill_dist', action='store_true')
 
@@ -114,6 +115,12 @@ def iteration_selfplay(args):
     if USE_GPU:
         student_speaker.cuda()
         student_listener.cuda()
+    stu_s_opt = None
+    stu_l_opt = None
+    if args.same_opt:
+        print('Use same optimizater across generations!')
+        stu_s_opt = torch.optim.Adam(lr=1e-4, params=student_speaker.parameters())
+        stu_l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
     game = torch.load(os.path.join(args.ckpt_dir, 'game.pth'))
     if USE_GPU:
         game.cuda()
@@ -161,8 +168,10 @@ def iteration_selfplay(args):
                                                      teacher_speaker=teacher_speaker,
                                                      max_steps=args.s_transmission_steps,
                                                      temperature=args.distill_temperature,
-                                                     use_sample=args.s_use_sample, student_ctx=args.student_ctx,
-                                                     with_eval_data=args.save_imitate_stats)
+                                                     use_sample=args.s_use_sample,
+                                                     student_ctx=args.student_ctx,
+                                                     with_eval_data=args.save_imitate_stats,
+                                                     opt=stu_s_opt)
                     if imitate_statss is not None:
                         fig, axs = plt.subplots(len(imitate_statss), figsize=(7, 7*len(imitate_statss)))
                         for name, ax in zip(imitate_statss, axs.reshape(-1)):
@@ -182,13 +191,15 @@ def iteration_selfplay(args):
                         print('Finetune listener!')
                         listener_finetune(game=game, student_listener=student_listener,
                                           max_steps=args.l_transmission_steps,
-                                          distilled_speaker=student_speaker)
+                                          distilled_speaker=student_speaker,
+                                          opt=stu_l_opt)
                     else:
                         print('Distill listener')
                         listener_imitate(game=game, student_listener=student_listener,
                                          teacher_listener=teacher_listener,
                                          max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
-                                         distilled_speaker=student_speaker)
+                                         distilled_speaker=student_speaker,
+                                         opt=stu_l_opt)
                 if args.save_distill_dist:
                     _, final_s_conf_mat = eval_speaker_loop(game.get_generator(1000), student_speaker)
                     img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
