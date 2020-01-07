@@ -70,6 +70,8 @@ def s2p(args):
         teacher_speaker.cuda()
         teacher_listener.cuda()
     game = torch.load(os.path.join(args.ckpt_dir, 'game.pth'))
+    if USE_GPU:
+        game.cuda()
     game.info()
     if os.path.exists(args.logdir):
         rmtree(args.logdir)
