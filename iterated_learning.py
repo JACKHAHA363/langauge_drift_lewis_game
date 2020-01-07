@@ -33,7 +33,6 @@ def get_args():
     parser.add_argument('-method', choices=['gumbel', 'a2c'], default='gumbel', help='Which way to train')
 
     # For transmission
-    parser.add_argument('-init_weight', action='store_true', help='Use the ckpt weights')
     parser.add_argument('-distill_temperature', type=float, default=0, help='If 0 fit with argmax, else use '
                                                                             'soft label with that temperature')
     parser.add_argument('-student_ctx', action='store', help='Whether or not to use student as context '
@@ -109,14 +108,12 @@ def _load_pretrained_agents(args):
 def iteration_selfplay(args):
     """ Load checkpoints """
     # Load populations
-    speaker, s_opt, listener, l_opt = _load_pretrained_agents(args)
-    teacher_speaker = speaker.from_state_dict(speaker.env_config, speaker.state_dict())
-    teacher_listener = listener.from_state_dict(listener.env_config, listener.state_dict())
+    teacher_speaker, s_opt, teacher_listener, l_opt = _load_pretrained_agents(args)
+    student_speaker = deepcopy(teacher_speaker)
+    student_listener = deepcopy(teacher_listener)
     if USE_GPU:
-        teacher_speaker.cuda()
-        teacher_listener.cuda()
-    s_ckpt = deepcopy(speaker.state_dict())
-    l_ckpt = deepcopy(listener.state_dict())
+        student_speaker.cuda()
+        student_listener.cuda()
     game = torch.load(os.path.join(args.ckpt_dir, 'game.pth'))
     if USE_GPU:
         game.cuda()
@@ -131,40 +128,37 @@ def iteration_selfplay(args):
     try:
         for step in range(args.steps):
             # Train for a Batch
-            speaker.train(True)
-            listener.train(True)
+            teacher_speaker.train(True)
+            teacher_listener.train(True)
             objs = game.random_sp_objs(args.batch_size)
             if args.method == 'gumbel':
-                selfplay_batch(objs, temperature, l_opt, listener, s_opt, speaker)
+                selfplay_batch(objs, temperature, l_opt, teacher_listener, s_opt, teacher_speaker)
                 temperature = max(args.min_temperature, temperature * args.decay_rate)
             elif args.method == 'a2c':
-                selfplay_batch_a2c(objs, l_opt, listener, s_opt, speaker, args.v_coef, args.ent_coef)
+                selfplay_batch_a2c(objs, l_opt, teacher_listener, s_opt, teacher_speaker,
+                                   args.v_coef, args.ent_coef)
             else:
                 raise NotImplementedError
 
             # Check if randomly reset one of speaker or listener to previous ckpt
             if (step + 1) % args.generation_steps == 0:
-                # Restore to old version and start transmission
-                teacher_speaker.load_state_dict(speaker.state_dict())
                 teacher_speaker.train(False)
-                if args.s_transmission_steps >= 0:
-                    speaker.load_state_dict(s_ckpt)
-                teacher_listener.load_state_dict(listener.state_dict())
                 teacher_listener.train(False)
-                if args.l_transmission_steps >= 0:
-                    listener.load_state_dict(l_ckpt)
 
                 print('Start transmission')
                 student_s_conf_mat = None
                 if args.save_distill_dist:
-                    _, student_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
+                    _, student_s_conf_mat = eval_speaker_loop(game.get_generator(1000), student_speaker)
 
                 teacher_speaker_stats, teacher_s_conf_mat = None, None
                 if args.save_distill_dist or args.save_imitate_stats:
-                    teacher_speaker_stats, teacher_s_conf_mat = eval_speaker_loop(game.get_generator(1000), teacher_speaker)
+                    teacher_speaker_stats, teacher_s_conf_mat = eval_speaker_loop(game.get_generator(1000),
+                                                                                  teacher_speaker)
 
                 if args.s_transmission_steps >= 0:
-                    imitate_statss = speaker_imitate(game=game, student_speaker=speaker, teacher_speaker=teacher_speaker,
+                    student_speaker.train(True)
+                    imitate_statss = speaker_imitate(game=game, student_speaker=student_speaker,
+                                                     teacher_speaker=teacher_speaker,
                                                      max_steps=args.s_transmission_steps,
                                                      temperature=args.distill_temperature,
                                                      use_sample=args.s_use_sample, student_ctx=args.student_ctx,
@@ -182,17 +176,21 @@ def iteration_selfplay(args):
 
                 # Distill using distilled speaker msg
                 if args.l_transmission_steps >= 0:
+                    student_speaker.train(False)
+                    student_listener.train(True)
                     if args.l_finetune:
                         print('Finetune listener!')
-                        listener_finetune(game=game, student_listener=listener, max_steps=args.l_transmission_steps,
-                                          distilled_speaker=speaker)
+                        listener_finetune(game=game, student_listener=student_listener,
+                                          max_steps=args.l_transmission_steps,
+                                          distilled_speaker=student_speaker)
                     else:
                         print('Distill listener')
-                        listener_imitate(game=game, student_listener=listener, teacher_listener=teacher_listener,
+                        listener_imitate(game=game, student_listener=student_listener,
+                                         teacher_listener=teacher_listener,
                                          max_steps=args.l_transmission_steps, temperature=args.distill_temperature,
-                                         distilled_speaker=speaker)
+                                         distilled_speaker=student_speaker)
                 if args.save_distill_dist:
-                    _, final_s_conf_mat = eval_speaker_loop(game.get_generator(1000), speaker)
+                    _, final_s_conf_mat = eval_speaker_loop(game.get_generator(1000), student_speaker)
                     img = plot_distill_change(game.vocab_size, final_s_conf_mat=final_s_conf_mat,
                                               student_s_conf_mat=student_s_conf_mat,
                                               teacher_s_conf_mat=teacher_s_conf_mat,
@@ -200,14 +198,13 @@ def iteration_selfplay(args):
                     print('Save distribution change')
                     img.savefig(os.path.join(args.logdir, 'dist_change_{}.png'.format(step)))
 
-                # Save for future student if do not use initial weight
-                if not args.init_weight:
-                    s_ckpt = deepcopy(speaker.state_dict())
-                    l_ckpt = deepcopy(listener.state_dict())
+                # Update teacher with student
+                teacher_speaker.load_state_dict(student_speaker.state_dict())
+                teacher_listener.load_state_dict(student_listener.state_dict())
 
             # Eval and Logging
             if step % args.log_steps == 0:
-                eval_loop(listener, speaker, game, writer, step, vocab_change_data)
+                eval_loop(teacher_listener, teacher_speaker, game, writer, step, vocab_change_data)
 
     except KeyboardInterrupt:
         pass

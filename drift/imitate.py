@@ -58,8 +58,11 @@ def imitate_speak_batch(student, teacher, opt, objs, temperature=0., use_sample=
         train_speaker_batch(student, opt, objs, msgs)
 
 
-def listener_finetune(game, student_listener, max_steps, distilled_speaker):
-    l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
+def listener_finetune(game, student_listener, max_steps, distilled_speaker, opt=None):
+    if opt is None:
+        l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
+    else:
+        l_opt = opt
     step = 0
     try:
         while True:
@@ -79,8 +82,12 @@ def listener_finetune(game, student_listener, max_steps, distilled_speaker):
         pass
 
 
-def listener_imitate(game, student_listener, teacher_listener, max_steps, distilled_speaker, temperature=0.):
-    l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
+def listener_imitate(game, student_listener, teacher_listener, max_steps, distilled_speaker, temperature=0.,
+                     opt=None):
+    if opt is None:
+        l_opt = torch.optim.Adam(lr=1e-4, params=student_listener.parameters())
+    else:
+        l_opt = opt
     step = 0
     try:
         while True:
@@ -101,8 +108,11 @@ def listener_imitate(game, student_listener, teacher_listener, max_steps, distil
 
 
 def speaker_imitate(game, student_speaker, teacher_speaker, max_steps, temperature=0., use_sample=False,
-                    student_ctx=True, with_eval_data=True):
-    s_opt = torch.optim.Adam(lr=1e-4, params=student_speaker.parameters())
+                    student_ctx=True, with_eval_data=True, opt=None):
+    if opt is None:
+        s_opt = torch.optim.Adam(lr=1e-4, params=student_speaker.parameters())
+    else:
+        s_opt = opt
     step = 0
     statss = []
     try:
