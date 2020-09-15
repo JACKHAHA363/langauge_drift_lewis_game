@@ -1,0 +1,16 @@
+.idea/
+*.egg-info
+__pycache__
+log_*
+*.csv
+*.pth
+logs/
+
+# For scratch
+zzz*
+
+slurm*
+
+exps/*
+!exps/.gitkeep
+
